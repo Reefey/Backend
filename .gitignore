@@ -1,0 +1,71 @@
+# macOS Finder
+.DS_Store
+
+# Environment variables & Build folder
+.env
+dist/
+
+# IDEA local files
+/.idea
+/.vscode
+/.cursor
+node_modules/
+*/node_modules
+
+# Xcode
+.build/
+xcuserdata/
+*.xcworkspace
+*.xcuserstate
+*.xcscheme
+
+## compatibility with Xcode 8 and earlier (ignoring not required starting Xcode 9)
+*.xcscmblueprint
+*.xccheckout
+
+## compatibility with Xcode 3 and earlier (ignoring not required starting Xcode 4)
+build/
+DerivedData/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+
+## Obj-C/Swift specific
+*.hmap
+
+## App packaging
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Checkouts
+Carthage/Build/
+
+# Accio dependency management
+Dependencies/
+.accio/
+
+# Swift Package Manager
+/.build/
+/Package.resolved
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/screenshots/**/*.png
+fastlane/test_output
