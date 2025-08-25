@@ -15,8 +15,10 @@ export const swaggerOptions = {
       },
       servers: [
         {
-          url: `http://localhost:${config.port}`,
-          description: 'Development server'
+          url: config.nodeEnv === 'production' 
+            ? 'https://586b5915665f.ngrok-free.app'
+            : `http://localhost:${config.port}`,
+          description: config.nodeEnv === 'production' ? 'Production server' : 'Development server'
         }
       ],
       components: {

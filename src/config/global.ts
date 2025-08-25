@@ -56,11 +56,34 @@ export const config = {
   // CORS Configuration
   cors: {
     origin: process.env['NODE_ENV'] === 'production' 
-      ? ['https://your-frontend-domain.com'] 
-      : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:8080'],
+      ? ['http://586b5915665f.ngrok-free.app', 'https://586b5915665f.ngrok-free.app'] 
+      : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:8080', 'http://586b5915665f.ngrok-free.app', 'https://586b5915665f.ngrok-free.app'],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+      'Origin',
+      'X-Requested-With',
+      'Content-Type',
+      'Accept',
+      'Authorization',
+      'X-API-Key',
+      'X-Client-Version',
+      'X-Platform',
+      'Cache-Control',
+      'Pragma'
+    ],
+    exposedHeaders: [
+      'Content-Length',
+      'Content-Range',
+      'X-Total-Count',
+      'X-Rate-Limit-Remaining',
+      'X-Rate-Limit-Reset'
+    ],
+    maxAge: 86400, // 24 hours
+    preflightContinue: false,
+    optionsSuccessStatus: 204
   },
-} as const;
+};
 
 // Validate required environment variables
 const requiredEnvVars = [

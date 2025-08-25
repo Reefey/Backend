@@ -4,8 +4,8 @@
   "description": "Reefey API - Marine life identification",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "build": "NODE_ENV=production tsc",
+    "start": "NODE_ENV=production node dist/index.js",
     "test:env": "ts-node src/config/test-env.ts",
     "test:supabase": "ts-node src/config/test-supabase.ts",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",

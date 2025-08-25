@@ -22,8 +22,10 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 // Create Express app
 const app = express();
 
-// Security middleware
-app.use(helmet());
+// Security middleware - disable CSP for development to avoid conflicts
+app.use(helmet({
+  contentSecurityPolicy: false
+}));
 
 // CORS middleware
 app.use(cors(config.cors));
@@ -73,9 +75,13 @@ app.use(errorHandler);
 const startServer = async () => {
   try {
     app.listen(config.port, () => {
+      const baseUrl = config.nodeEnv === 'production' 
+        ? 'https://586b5915665f.ngrok-free.app'
+        : `http://localhost:${config.port}`;
+      
       console.log(`🚀 Reefey API server running on port ${config.port}`);
-      console.log(`📚 API Documentation: http://localhost:${config.port}/api-docs`);
-      console.log(`🏥 Health Check: http://localhost:${config.port}/api/health`);
+      console.log(`📚 API Documentation: ${baseUrl}/api-docs`);
+      console.log(`🏥 Health Check: ${baseUrl}/api/health`);
       console.log(`🌍 Environment: ${config.nodeEnv}`);
     });
   } catch (error) {
