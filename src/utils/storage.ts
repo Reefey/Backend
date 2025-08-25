@@ -19,9 +19,35 @@ export class StorageService {
 
   // Convert image format (e.g., HEIC to JPEG)
   async convertImage(buffer: Buffer, format: 'jpeg' | 'png' | 'webp' = 'jpeg'): Promise<Buffer> {
-    return sharp(buffer)
-      .toFormat(format)
-      .toBuffer();
+    try {
+      return await sharp(buffer)
+        .toFormat(format)
+        .toBuffer();
+    } catch (error) {
+      console.error('Image conversion failed:', error);
+      throw new Error(`Failed to convert image to ${format}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Validate image format and convert if needed
+  async validateAndConvertImage(buffer: Buffer): Promise<{ buffer: Buffer; format: string }> {
+    try {
+      // Try to get image metadata to validate format
+      const metadata = await sharp(buffer).metadata();
+      const format = metadata.format?.toLowerCase();
+      
+      // Convert to JPEG if not already JPEG
+      if (format !== 'jpeg') {
+        console.log(`Converting image from ${format} to jpeg`);
+        const jpegBuffer = await this.convertImage(buffer, 'jpeg');
+        return { buffer: jpegBuffer, format: 'jpeg' };
+      }
+      
+      return { buffer, format: 'jpeg' };
+    } catch (error) {
+      console.error('Image validation failed:', error);
+      throw new Error(`Invalid or unsupported image format: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   // Create annotated image with bounding boxes
@@ -31,44 +57,65 @@ export class StorageService {
       species: string;
       confidence: number;
       instances: Array<{ boundingBox: BoundingBox; confidence: number }>;
-    }>
+    }>,
+    useProcessedBuffer: boolean = false
   ): Promise<Buffer> {
-    const image = await loadImage(imageBuffer);
-    const canvas = createCanvas(image.width, image.height);
-    const ctx = canvas.getContext('2d');
+    try {
+      let jpegBuffer: Buffer;
+      
+      if (useProcessedBuffer) {
+        // Use the already processed JPEG buffer (from AI analysis)
+        jpegBuffer = imageBuffer;
+      } else {
+        // Validate and convert image to JPEG first to prevent "Unsupported image type" errors
+        const { buffer } = await this.validateAndConvertImage(imageBuffer);
+        jpegBuffer = buffer;
+      }
+      
+      const image = await loadImage(jpegBuffer);
+      const canvas = createCanvas(image.width, image.height);
+      const ctx = canvas.getContext('2d');
 
-    // Draw original image
-    ctx.drawImage(image, 0, 0);
+      // Draw original image
+      ctx.drawImage(image, 0, 0);
 
-    // Draw bounding boxes for each detection
-    detections.forEach((detection, index) => {
-      const colors = ['#00FF00', '#FF0000', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
-      const color = colors[index % colors.length] || '#00FF00';
+      // Draw bounding boxes for each detection
+      detections.forEach((detection, index) => {
+        const colors = ['#00FF00', '#FF0000', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
+        const color = colors[index % colors.length] || '#00FF00';
 
-      detection.instances.forEach(instance => {
-        const { x, y, width, height } = instance.boundingBox;
+        detection.instances.forEach(instance => {
+          // Convert relative coordinates (0.0-1.0) to pixel coordinates
+          const pixelX = Math.round(instance.boundingBox.x * image.width);
+          const pixelY = Math.round(instance.boundingBox.y * image.height);
+          const pixelWidth = Math.round(instance.boundingBox.width * image.width);
+          const pixelHeight = Math.round(instance.boundingBox.height * image.height);
 
-        // Draw rectangle
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
-        ctx.strokeRect(x, y, width, height);
+          // Draw rectangle
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 3;
+          ctx.strokeRect(pixelX, pixelY, pixelWidth, pixelHeight);
 
-        // Draw label background
-        const label = `${detection.species} (${Math.round(instance.confidence * 100)}%)`;
-        const labelWidth = ctx.measureText(label).width + 10;
-        const labelHeight = 20;
+          // Draw label background
+          const label = `${detection.species} (${Math.round(instance.confidence * 100)}%)`;
+          const labelWidth = ctx.measureText(label).width + 10;
+          const labelHeight = 20;
 
-        ctx.fillStyle = color;
-        ctx.fillRect(x, y - labelHeight - 5, labelWidth, labelHeight);
+          ctx.fillStyle = color;
+          ctx.fillRect(pixelX, pixelY - labelHeight - 5, labelWidth, labelHeight);
 
-        // Draw label text
-        ctx.fillStyle = '#000000';
-        ctx.font = '14px Arial';
-        ctx.fillText(label, x + 5, y - 8);
+          // Draw label text
+          ctx.fillStyle = '#000000';
+          ctx.font = '14px Arial';
+          ctx.fillText(label, pixelX + 5, pixelY - 8);
+        });
       });
-    });
 
-    return canvas.toBuffer('image/jpeg', { quality: 0.9 });
+      return canvas.toBuffer('image/jpeg', { quality: 0.9 });
+    } catch (error) {
+      console.error('Error creating annotated image:', error);
+      throw new Error(`Failed to create annotated image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   // Upload file to Supabase Storage
@@ -104,7 +151,8 @@ export class StorageService {
       species: string;
       confidence: number;
       instances: Array<{ boundingBox: BoundingBox; confidence: number }>;
-    }>
+    }>,
+    processedImageBuffer?: Buffer
   ): Promise<{
     originalUrl: string;
     annotatedUrl?: string;
@@ -113,10 +161,14 @@ export class StorageService {
     const filename = this.generateFilename(file.originalname, `${species}_`);
     const filePath = `collections/${deviceId}/${species}/${filename}`;
 
-    // Convert image if needed
+    // Validate and convert image to JPEG to prevent "Unsupported image type" errors
     let imageBuffer = file.buffer;
-    if (file.mimetype.includes('heic') || file.mimetype.includes('heif')) {
-      imageBuffer = await this.convertImage(file.buffer, 'jpeg');
+    try {
+      const { buffer } = await this.validateAndConvertImage(file.buffer);
+      imageBuffer = buffer;
+    } catch (error) {
+      console.error('Failed to validate/convert image:', error);
+      throw new Error(`Invalid image format: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
     // Upload original image
@@ -132,7 +184,15 @@ export class StorageService {
     // Create and upload annotated image if detections are provided
     if (detections && detections.length > 0) {
       try {
-        const annotatedBuffer = await this.createAnnotatedImage(imageBuffer, detections);
+        // Use processed image buffer if provided (for consistent annotation)
+        const bufferForAnnotation = processedImageBuffer || imageBuffer;
+        const useProcessedBuffer = !!processedImageBuffer;
+        
+        const annotatedBuffer = await this.createAnnotatedImage(
+          bufferForAnnotation, 
+          detections,
+          useProcessedBuffer
+        );
         const annotatedPath = filePath.replace(/\.[^/.]+$/, '_annotated.jpg');
         
         annotatedUrl = await this.uploadFile(
@@ -160,8 +220,18 @@ export class StorageService {
     marineId: number,
     filename: string
   ): Promise<string> {
+    // Validate and convert image to JPEG to prevent "Unsupported image type" errors
+    let imageBuffer = buffer;
+    try {
+      const { buffer: validatedBuffer } = await this.validateAndConvertImage(buffer);
+      imageBuffer = validatedBuffer;
+    } catch (error) {
+      console.error('Failed to validate/convert image:', error);
+      throw new Error(`Invalid image format: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+    
     const filePath = `marine/${marineId}/${filename}`;
-    return this.uploadFile(buffer, config.storage.bucket, filePath);
+    return this.uploadFile(imageBuffer, config.storage.bucket, filePath, 'image/jpeg');
   }
 
   // Delete file from storage

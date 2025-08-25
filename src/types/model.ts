@@ -76,10 +76,10 @@ export interface CollectionPhoto {
 }
 
 export interface BoundingBox {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  x: number;      // Relative position from left edge (0.000 to 1.000)
+  y: number;      // Relative position from top edge (0.000 to 1.000)
+  width: number;  // Relative width (0.000 to 1.000)
+  height: number; // Relative height (0.000 to 1.000)
 }
 
 // API Request/Response Types
@@ -147,9 +147,16 @@ export interface AIDetection {
   species: string;
   scientificName?: string;
   confidence: number;
+  confidenceReasoning?: string;
   wasInDatabase: boolean;
   databaseId?: number;
   instances: AIDetectionInstance[];
+  description?: string;
+  behavioralNotes?: string;
+  sizeEstimate?: string;
+  habitatContext?: string;
+  interactions?: string;
+  imageQuality?: string;
 }
 
 export interface AIDetectionInstance {
@@ -159,9 +166,32 @@ export interface AIDetectionInstance {
 
 export interface UnknownSpecies {
   description: string;
+  behavioralNotes?: string;
+  sizeCharacteristics?: string;
+  colorPatterns?: string;
+  habitatPosition?: string;
+  similarSpecies?: string[];
   gptResponse?: string;
   confidence: number;
+  confidenceReasoning?: string;
   instances: AIDetectionInstance[];
+}
+
+export interface ImageAnalysis {
+  overallQuality: 'excellent' | 'good' | 'fair' | 'poor';
+  lightingConditions: 'bright' | 'moderate' | 'dim' | 'mixed';
+  waterClarity: 'clear' | 'moderate' | 'turbid';
+  depthEstimate: 'shallow' | 'medium' | 'deep';
+  habitatType: 'reef' | 'sand' | 'seagrass' | 'mixed';
+}
+
+export interface AnnotationMetadata {
+  totalDetections: number;
+  identifiedSpecies: number;
+  unknownSpecies: number;
+  averageConfidence: number;
+  annotationQuality: 'high' | 'medium' | 'low';
+  processingNotes?: string;
 }
 
 export interface AIAnalysisResponse {
@@ -170,6 +200,9 @@ export interface AIAnalysisResponse {
   originalPhotoUrl: string;
   annotatedPhotoUrl: string;
   collectionEntries: CollectionEntry[];
+  processedImageBuffer?: Buffer; // The JPEG buffer used for AI analysis
+  imageAnalysis?: ImageAnalysis;
+  annotationMetadata?: AnnotationMetadata;
 }
 
 export interface CollectionEntry {

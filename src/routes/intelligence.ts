@@ -29,6 +29,248 @@ const upload = multer({
   }
 });
 
+// Configure multer for multiple files
+const uploadMultiple = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    // Accept all image types - we'll convert to JPG later
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  },
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB per file
+    files: 10 // Maximum 10 files per request
+  }
+});
+
+/**
+ * @swagger
+ * /api/ai/batch-analyze-photos:
+ *   post:
+ *     summary: Batch analyze multiple photos for comprehensive marine life annotation
+ *     tags: [Intelligence]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               deviceId:
+ *                 type: string
+ *                 description: Device identifier
+ *               photos:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Multiple photo files (jpeg, png, heic, webp)
+ *               spotId:
+ *                 type: integer
+ *                 description: Associated snorkeling spot ID
+ *               lat:
+ *                 type: number
+ *                 description: GPS latitude
+ *               lng:
+ *                 type: number
+ *                 description: GPS longitude
+ *     responses:
+ *       200:
+ *         description: Photos analyzed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     results:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           filename:
+ *                             type: string
+ *                           success:
+ *                             type: boolean
+ *                           analysis:
+ *                             type: object
+ *                           error:
+ *                             type: string
+ *                     summary:
+ *                       type: object
+ *                       properties:
+ *                         totalImages:
+ *                           type: integer
+ *                         successfulAnalyses:
+ *                           type: integer
+ *                         failedAnalyses:
+ *                           type: integer
+ *                         totalDetections:
+ *                           type: integer
+ *                         averageConfidence:
+ *                           type: number
+ *                         processingTime:
+ *                           type: integer
+ *                 message:
+ *                   type: string
+ *       429:
+ *         description: Rate limit exceeded
+ */
+router.post('/batch-analyze-photos',
+  uploadMultiple.array('photos', 10),
+  asyncHandler(async (req: Request, res: Response<ApiResponse>) => {
+    const deviceId = req.body['deviceId'];
+    
+    if (!deviceId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Device ID is required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'At least one photo file is required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    // Check rate limit for batch processing
+    const rateLimitInfo = aiService.getRateLimitInfo(deviceId);
+    const files = req.files as Express.Multer.File[];
+    const requiredRequests = files.length;
+    if (rateLimitInfo.used + requiredRequests > rateLimitInfo.limit) {
+      return res.status(429).json({
+        success: false,
+        error: `Rate limit would be exceeded. Required: ${requiredRequests}, Available: ${rateLimitInfo.limit - rateLimitInfo.used}`,
+        code: 'RATE_LIMIT_EXCEEDED'
+      } as any);
+    }
+
+    // Extract form data
+    const spotId = req.body['spotId'] ? parseInt(req.body['spotId']) : undefined;
+    const lat = req.body['lat'] ? parseFloat(req.body['lat']) : undefined;
+    const lng = req.body['lng'] ? parseFloat(req.body['lng']) : undefined;
+
+    // Prepare images for batch processing
+    const images = files.map((file: Express.Multer.File) => ({
+      buffer: file.buffer,
+      filename: file.originalname
+    }));
+
+    // Perform batch analysis
+    const batchResult = await aiService.batchAnalyzeImages(images, deviceId, spotId, lat, lng);
+
+    // Process successful analyses and create collection entries
+    const processedResults = [];
+    
+    for (const result of batchResult.results) {
+      if (result.success) {
+        const analysis = result.analysis;
+        
+        // Upload photos and create collection entries for each detection
+        const photoData = await storage.uploadCollectionPhoto(
+          {
+            buffer: analysis.processedImageBuffer || Buffer.from([]),
+            mimetype: 'image/jpeg',
+            originalname: result.filename,
+            size: analysis.processedImageBuffer?.length || 0
+          } as Express.Multer.File,
+          deviceId,
+          'batch_analysis',
+          0,
+          analysis.detections,
+          analysis.processedImageBuffer
+        );
+
+        // Create collection entries for each detected species
+        const collectionEntries = [];
+        
+        for (const detection of analysis.detections) {
+          // Create collection entry
+          const collectionData: any = {
+            deviceId,
+            status: 'identified',
+            firstSeen: new Date().toISOString(),
+            lastSeen: new Date().toISOString()
+          };
+
+          if (detection.databaseId) {
+            collectionData.marineId = detection.databaseId;
+          }
+
+          const collection = await db.createCollection(collectionData);
+
+          // Add photo to collection
+          const photoDataForDb: any = {
+            collectionId: collection.id,
+            url: photoData.originalUrl,
+            dateFound: new Date().toISOString(),
+            storageBucket: 'reefey-photos',
+            filePath: photoData.filePath,
+            fileSize: analysis.processedImageBuffer?.length || 0,
+            mimeType: 'image/jpeg'
+          };
+
+          if (photoData.annotatedUrl) photoDataForDb.annotatedUrl = photoData.annotatedUrl;
+          if (spotId) photoDataForDb.spotId = spotId;
+          if (lat) photoDataForDb.lat = lat;
+          if (lng) photoDataForDb.lng = lng;
+          if (detection.instances[0]?.boundingBox) {
+            photoDataForDb.boundingBox = detection.instances[0].boundingBox;
+          }
+
+          const photo = await db.addPhotoToCollection(photoDataForDb);
+
+          collectionEntries.push({
+            id: collection.id,
+            marineId: detection.databaseId,
+            name: detection.species,
+            status: 'identified',
+            photo: {
+              url: photo.url,
+              annotatedUrl: photo.annotatedUrl,
+              boundingBox: detection.instances[0]?.boundingBox || { x: 0, y: 0, width: 100, height: 100 }
+            }
+          });
+        }
+
+        processedResults.push({
+          filename: result.filename,
+          success: true,
+          analysis: {
+            ...analysis,
+            originalPhotoUrl: photoData.originalUrl,
+            annotatedPhotoUrl: photoData.annotatedUrl,
+            collectionEntries
+          }
+        });
+      } else {
+        processedResults.push(result);
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        results: processedResults,
+        summary: batchResult.summary
+      },
+      message: `Batch analysis completed - ${batchResult.summary.successfulAnalyses}/${batchResult.summary.totalImages} images processed successfully`
+    });
+    return;
+  })
+);
+
 /**
  * @swagger
  * /api/ai/analyze-photo:
@@ -150,7 +392,7 @@ router.post('/analyze-photo',
     // Analyze image with AI
     const analysis = await aiService.analyzeImage(processedFile.buffer, deviceId);
 
-    // Upload original photo
+    // Upload original photo and create annotated version using the processed buffer
     const photoData = await storage.uploadCollectionPhoto(
       {
         ...req.file,
@@ -161,7 +403,8 @@ router.post('/analyze-photo',
       deviceId,
       'ai_analysis',
       0, // Use 0 as default collection ID
-      analysis.detections // Pass detections for annotated image creation
+      analysis.detections, // Pass detections for annotated image creation
+      analysis.processedImageBuffer // Use the exact same buffer that AI analyzed
     );
 
     // Create collection entries for each detected species
@@ -224,8 +467,10 @@ router.post('/analyze-photo',
         unknownSpecies: analysis.unknownSpecies,
         originalPhotoUrl: photoData.originalUrl,
         annotatedPhotoUrl: photoData.annotatedUrl,
-
-        collectionEntries
+        collectionEntries,
+        // Include enhanced annotation data
+        ...(analysis.imageAnalysis && { imageAnalysis: analysis.imageAnalysis }),
+        ...(analysis.annotationMetadata && { annotationMetadata: analysis.annotationMetadata })
       },
       message: `Photo analyzed successfully - ${analysis.detections.length} species detected`
     });
@@ -441,8 +686,10 @@ router.post('/analyze-photo-url',
           unknownSpecies: analysis.unknownSpecies,
           originalPhotoUrl: photoData.originalUrl,
           annotatedPhotoUrl: photoData.annotatedUrl,
-
-          collectionEntries
+          collectionEntries,
+          // Include enhanced annotation data
+          ...(analysis.imageAnalysis && { imageAnalysis: analysis.imageAnalysis }),
+          ...(analysis.annotationMetadata && { annotationMetadata: analysis.annotationMetadata })
         },
         message: `Photo analyzed successfully - ${analysis.detections.length} species detected`
       });
