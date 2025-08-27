@@ -24,7 +24,7 @@ export const config = {
   ai: {
     rateLimitPerDay: parseInt(process.env['AI_RATE_LIMIT_PER_DAY'] || '10'),
     confidenceThreshold: parseFloat(process.env['AI_CONFIDENCE_THRESHOLD'] || '0.7'),
-    maxFileSize: parseInt(process.env['AI_MAX_FILE_SIZE'] || '10485760'), // 10MB
+    maxFileSize: parseInt(process.env['AI_MAX_FILE_SIZE'] || '52428800'), // 50MB
     timeout: parseInt(process.env['AI_TIMEOUT'] || '30000'), // 30 seconds
   },
   
@@ -35,7 +35,7 @@ export const config = {
   
   // File Upload Configuration
   upload: {
-    maxFileSize: 10 * 1024 * 1024, // 10MB
+    maxFileSize: 50 * 1024 * 1024, // 50MB
     allowedMimeTypes: [
       'image/jpeg',
       'image/jpg',
@@ -47,10 +47,14 @@ export const config = {
     allowedExtensions: ['.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp'],
   },
   
-  // Rate Limiting Configuration
+  // Rate Limiting Configuration - Bypassed for all domains and devices
   rateLimit: {
     windowMs: 24 * 60 * 60 * 1000, // 24 hours
-    max: 100, // limit each IP to 100 requests per windowMs
+    max: 1000000000, // Very high limit to effectively bypass rate limiting
+    skipSuccessfulRequests: true, // Skip counting successful requests
+    skipFailedRequests: true, // Skip counting failed requests
+    standardHeaders: false, // Disable rate limit headers
+    legacyHeaders: false, // Disable legacy rate limit headers
   },
   
   // CORS Configuration

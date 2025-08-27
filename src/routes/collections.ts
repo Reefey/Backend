@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import multer from 'multer';
-import { validateParams, validateQuery } from '../middleware/validation';
+import { validateParams, validateQuery, validate } from '../middleware/validation';
 import { schemas } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
 import { DatabaseService } from '../utils/database';
@@ -23,9 +23,150 @@ const upload = multer({
     }
   },
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB
+    fileSize: 50 * 1024 * 1024 // 50MB
   }
 });
+
+/**
+ * @swagger
+ * /api/collections/{deviceId}/base64:
+ *   post:
+ *     summary: Add a new finding to user's collection using base64 image
+ *     tags: [Collections]
+ *     parameters:
+ *       - in: path
+ *         name: deviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Device identifier
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               photo:
+ *                 type: string
+ *                 description: Base64 encoded image (data URL or plain base64)
+ *               species:
+ *                 type: string
+ *                 description: Marine species name
+ *               spotId:
+ *                 type: integer
+ *                 description: Spot ID where photo was taken
+ *               lat:
+ *                 type: number
+ *                 description: GPS latitude where photo was taken
+ *               lng:
+ *                 type: number
+ *                 description: GPS longitude where photo was taken
+ *               boundingBox:
+ *                 type: string
+ *                 description: JSON string of bounding box coordinates
+ *               notes:
+ *                 type: string
+ *                 description: User notes about the photo
+ *     responses:
+ *       201:
+ *         description: Finding added to collection
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/CollectionEntry'
+ *                 message:
+ *                   type: string
+ */
+router.post('/:deviceId/base64',
+  validateParams(schemas.deviceIdParam),
+  validate(schemas.base64ImageUpload),
+  asyncHandler(async (req: Request, res: Response<ApiResponse>) => {
+    const deviceId = req.params['deviceId'];
+    
+    if (!deviceId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Device ID is required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    if (!req.body.photo) {
+      return res.status(400).json({
+        success: false,
+        error: 'Photo is required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    // Process base64 image
+    const processedFile = await storage.processImageInput(req.body.photo);
+
+    // Extract form data
+    const species = req.body.species;
+    const spotId = req.body.spotId ? parseInt(req.body.spotId) : undefined;
+    const lat = req.body.lat ? parseFloat(req.body.lat) : undefined;
+    const lng = req.body.lng ? parseFloat(req.body.lng) : undefined;
+    const boundingBox = req.body.boundingBox ? JSON.parse(req.body.boundingBox) : undefined;
+    const notes = req.body.notes;
+
+    // Create or find collection
+    const collectionData: any = {
+      deviceId,
+      status: 'pending',
+      firstSeen: new Date().toISOString(),
+      lastSeen: new Date().toISOString()
+    };
+
+    const collection = await db.createCollection(collectionData);
+
+    // Upload photo with processed file
+    const photoData = await storage.uploadCollectionPhoto(
+      {
+        buffer: processedFile.buffer,
+        mimetype: processedFile.mimeType,
+        originalname: processedFile.filename,
+        size: processedFile.size
+      } as Express.Multer.File,
+      deviceId,
+      species || 'unknown',
+      collection.id
+    );
+
+    // Add photo to collection
+    const photoDataForDb: any = {
+      collectionId: collection.id
+    };
+
+    if (photoData.originalUrl) photoDataForDb.url = photoData.originalUrl;
+    if (photoData.annotatedUrl) photoDataForDb.annotatedUrl = photoData.annotatedUrl;
+    if (spotId) photoDataForDb.spotId = spotId;
+    if (lat) photoDataForDb.lat = lat;
+    if (lng) photoDataForDb.lng = lng;
+    if (boundingBox) photoDataForDb.boundingBox = boundingBox;
+    if (notes) photoDataForDb.notes = notes;
+    if (photoData.filePath) photoDataForDb.filePath = photoData.filePath;
+    if (processedFile.size) photoDataForDb.fileSize = processedFile.size;
+    if (processedFile.mimeType) photoDataForDb.mimeType = processedFile.mimeType;
+
+    await db.addPhotoToCollection(photoDataForDb);
+
+    // Get collection with photos
+    const collectionWithPhotos = await db.getCollectionById(collection.id, deviceId);
+
+    return res.status(201).json({
+      success: true,
+      data: collectionWithPhotos,
+      message: 'Finding added to collection successfully'
+    });
+  })
+);
 
 /**
  * @swagger
@@ -262,20 +403,6 @@ router.get('/:deviceId',
  *               notes:
  *                 type: string
  *                 description: User notes about the photo
- *     responses:
- *       201:
- *         description: Finding added to collection
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   $ref: '#/components/schemas/CollectionEntry'
- *                 message:
- *                   type: string
  */
 router.post('/:deviceId',
   validateParams(schemas.deviceIdParam),
@@ -359,12 +486,7 @@ router.post('/:deviceId',
     const photo = await db.addPhotoToCollection(photoDataForDb);
 
     // Get updated collection with photos
-    const updatedCollection = await db.getCollections(deviceId, {});
-    const collectionEntry = updatedCollection.data.find((c: any) => c.id === collection.id);
-
-    if (!collectionEntry) {
-      throw new Error('Failed to retrieve created collection');
-    }
+    const collectionEntry = await db.getCollectionById(collection.id, deviceId);
 
     res.status(201).json({
       success: true,
@@ -451,11 +573,11 @@ router.get('/:deviceId/:collectionId',
       });
     }
 
-    // Get collections for the device and find the specific one
-    const result = await db.getCollections(deviceId, {});
-    const collection = result.data.find((c: any) => c.id === collectionId);
-
-    if (!collection) {
+    // Get the specific collection by ID
+    let collection;
+    try {
+      collection = await db.getCollectionById(collectionId, deviceId);
+    } catch (error) {
       return res.status(404).json({
         success: false,
         error: 'Collection not found',
@@ -572,10 +694,9 @@ router.delete('/:deviceId/:collectionId',
     }
 
     // Verify the collection belongs to the device
-    const result = await db.getCollections(deviceId, {});
-    const collection = result.data.find((c: any) => c.id === collectionId);
-
-    if (!collection) {
+    try {
+      await db.getCollectionById(collectionId, deviceId);
+    } catch (error) {
       return res.status(404).json({
         success: false,
         error: 'Collection not found',
@@ -688,10 +809,10 @@ router.post('/:deviceId/:collectionId',
     }
 
     // Verify collection belongs to device
-    const collections = await db.getCollections(deviceId, {});
-    const collection = collections.data.find((c: any) => c.id === collectionId);
-
-    if (!collection) {
+    let collection;
+    try {
+      collection = await db.getCollectionById(collectionId, deviceId);
+    } catch (error) {
       return res.status(404).json({
         success: false,
         error: 'Collection not found',
@@ -734,12 +855,7 @@ router.post('/:deviceId/:collectionId',
     const photo = await db.addPhotoToCollection(photoDataForDb);
 
     // Get updated collection with photos
-    const updatedCollections = await db.getCollections(deviceId, {});
-    const updatedCollection = updatedCollections.data.find((c: any) => c.id === collectionId);
-
-    if (!updatedCollection) {
-      throw new Error('Failed to retrieve updated collection');
-    }
+    const updatedCollection = await db.getCollectionById(collectionId, deviceId);
 
     res.json({
       success: true,
@@ -764,6 +880,171 @@ router.post('/:deviceId/:collectionId',
       }
     });
     return;
+  })
+);
+
+/**
+ * @swagger
+ * /api/collections/{deviceId}/{collectionId}/base64:
+ *   post:
+ *     summary: Add a new photo to an existing collection entry using base64 image
+ *     tags: [Collections]
+ *     parameters:
+ *       - in: path
+ *         name: deviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Device identifier
+ *       - in: path
+ *         name: collectionId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Collection ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               photo:
+ *                 type: string
+ *                 description: Base64 encoded image (data URL or plain base64)
+ *               spotId:
+ *                 type: integer
+ *                 description: Spot ID where photo was taken
+ *               lat:
+ *                 type: number
+ *                 description: GPS latitude where photo was taken
+ *               lng:
+ *                 type: number
+ *                 description: GPS longitude where photo was taken
+ *               dateFound:
+ *                 type: string
+ *                 format: date
+ *                 description: Date when photo was taken (YYYY-MM-DD format)
+ *               notes:
+ *                 type: string
+ *                 description: User notes about the photo
+ *     responses:
+ *       200:
+ *         description: Photo added to existing collection
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     collectionId:
+ *                       type: integer
+ *                     newPhoto:
+ *                       $ref: '#/components/schemas/CollectionPhoto'
+ *                     totalPhotos:
+ *                       type: integer
+ *                     lastSeen:
+ *                       type: string
+ *                     message:
+ *                       type: string
+ */
+router.post('/:deviceId/:collectionId/base64',
+  validateParams(schemas.deviceIdAndCollectionIdParam),
+  validate(schemas.base64CollectionPhoto),
+  asyncHandler(async (req: Request, res: Response<ApiResponse>) => {
+    const deviceId = req.params['deviceId'];
+    const collectionId = parseInt(req.params['collectionId'] || '0');
+    
+    if (!deviceId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Device ID is required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    if (!req.body.photo) {
+      return res.status(400).json({
+        success: false,
+        error: 'Photo is required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    // Verify collection belongs to device
+    let collection;
+    try {
+      collection = await db.getCollectionById(collectionId, deviceId);
+    } catch (error) {
+      return res.status(404).json({
+        success: false,
+        error: 'Collection not found',
+        code: 'NOT_FOUND'
+      });
+    }
+
+    // Process base64 image
+    const processedFile = await storage.processImageInput(req.body.photo);
+
+    // Extract form data
+    const spotId = req.body.spotId ? parseInt(req.body.spotId) : undefined;
+    const lat = req.body.lat ? parseFloat(req.body.lat) : undefined;
+    const lng = req.body.lng ? parseFloat(req.body.lng) : undefined;
+    const dateFound = req.body.dateFound ? new Date(req.body.dateFound).toISOString() : new Date().toISOString();
+    const notes = req.body.notes;
+
+    // Upload photo
+    const photoData = await storage.uploadCollectionPhoto(
+      {
+        buffer: processedFile.buffer,
+        mimetype: processedFile.mimeType,
+        originalname: processedFile.filename,
+        size: processedFile.size
+      } as Express.Multer.File,
+      deviceId,
+      collection.marine?.name || 'unknown',
+      collectionId
+    );
+
+    // Add photo to collection
+    const photoDataForDb: any = {
+      collectionId,
+      url: photoData.originalUrl,
+      dateFound,
+      notes,
+      storageBucket: 'reefey-photos',
+      filePath: photoData.filePath,
+      fileSize: processedFile.size,
+      mimeType: processedFile.mimeType
+    };
+
+    if (photoData.annotatedUrl) photoDataForDb.annotatedUrl = photoData.annotatedUrl;
+    if (spotId) photoDataForDb.spotId = spotId;
+    if (lat) photoDataForDb.lat = lat;
+    if (lng) photoDataForDb.lng = lng;
+
+    const photo = await db.addPhotoToCollection(photoDataForDb);
+
+    // Update collection last seen timestamp
+    await db.updateCollectionLastSeen(collectionId, deviceId);
+
+    // Get updated collection
+    const updatedCollection = await db.getCollectionById(collectionId, deviceId);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        collectionId,
+        newPhoto: photo,
+        totalPhotos: updatedCollection.photos?.length || 0,
+        lastSeen: updatedCollection.lastSeen,
+        message: 'Photo added to collection successfully'
+      }
+    });
   })
 );
 

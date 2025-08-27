@@ -544,15 +544,13 @@ export class DatabaseService {
         query = query.order('first_seen', { ascending: false });
     }
 
-    // Pagination
-    query = query.range(offset, offset + size - 1);
-
-    const { data, count, error } = await query;
+    // Get all collections first (without pagination) to filter by photos
+    const { data, error } = await query;
 
     if (error) throw error;
 
-    // Transform snake_case to camelCase
-    const transformedData = data?.map((collection: any) => ({
+    // Transform snake_case to camelCase and filter collections with photos
+    const allTransformedData = data?.map((collection: any) => ({
       id: collection.id,
       deviceId: collection.device_id,
       marineId: collection.marine_id,
@@ -584,12 +582,15 @@ export class DatabaseService {
         boundingBox: photo.bounding_box,
         notes: photo.notes
       })) || []
-    })) || [];
+    }))
+    .filter((collection: any) => collection.photos && collection.photos.length > 0) || [];
 
-    const total = count || 0;
+    // Apply pagination to filtered results
+    const total = allTransformedData.length;
     const totalPages = Math.ceil(total / size);
     const hasNext = page < totalPages;
     const hasPrevious = page > 1;
+    const transformedData = allTransformedData.slice(offset, offset + size);
 
     return {
       data: transformedData,
@@ -599,6 +600,156 @@ export class DatabaseService {
       totalPages,
       hasNext,
       hasPrevious
+    };
+  }
+
+  // Get collection by ID (without photo filtering)
+  async getCollectionById(collectionId: number, deviceId: string) {
+    const { data, error } = await this.client
+      .from('collections')
+      .select(`
+        *,
+        marine (
+          id,
+          name,
+          scientific_name,
+          rarity,
+          size_min_cm,
+          size_max_cm,
+          habitat_type,
+          diet,
+          behavior,
+          description,
+          image_url
+        ),
+        collection_photos (
+          id,
+          url,
+          annotated_url,
+          date_found,
+          spot_id,
+          confidence,
+          bounding_box,
+          notes
+        )
+      `)
+      .eq('id', collectionId)
+      .eq('device_id', deviceId)
+      .single();
+
+    if (error) throw error;
+
+    // Transform snake_case to camelCase
+    return {
+      id: data.id,
+      deviceId: data.device_id,
+      marineId: data.marine_id,
+      status: data.status,
+      firstSeen: data.first_seen,
+      lastSeen: data.last_seen,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      marine: data.marine ? {
+        id: data.marine.id,
+        name: data.marine.name,
+        scientificName: data.marine.scientific_name,
+        rarity: data.marine.rarity,
+        sizeMinCm: data.marine.size_min_cm,
+        sizeMaxCm: data.marine.size_max_cm,
+        habitatType: data.marine.habitat_type,
+        diet: data.marine.diet,
+        behavior: data.marine.behavior,
+        description: data.marine.description,
+        imageUrl: data.marine.image_url
+      } : null,
+      photos: data.collection_photos?.map((photo: any) => ({
+        id: photo.id,
+        url: photo.url,
+        annotatedUrl: photo.annotated_url,
+        dateFound: photo.date_found,
+        spotId: photo.spot_id,
+        confidence: photo.confidence,
+        boundingBox: photo.bounding_box,
+        notes: photo.notes
+      })) || []
+    };
+  }
+
+  // Find existing collection by marine species and device
+  async findCollectionByMarineAndDevice(marineId: number, deviceId: string) {
+    const { data, error } = await this.client
+      .from('collections')
+      .select(`
+        *,
+        marine (
+          id,
+          name,
+          scientific_name,
+          rarity,
+          size_min_cm,
+          size_max_cm,
+          habitat_type,
+          diet,
+          behavior,
+          description,
+          image_url
+        ),
+        collection_photos (
+          id,
+          url,
+          annotated_url,
+          date_found,
+          spot_id,
+          confidence,
+          bounding_box,
+          notes
+        )
+      `)
+      .eq('marine_id', marineId)
+      .eq('device_id', deviceId)
+      .single();
+
+    if (error) {
+      // If no collection found, return null
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      throw error;
+    }
+
+    // Transform snake_case to camelCase
+    return {
+      id: data.id,
+      deviceId: data.device_id,
+      marineId: data.marine_id,
+      status: data.status,
+      firstSeen: data.first_seen,
+      lastSeen: data.last_seen,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      marine: data.marine ? {
+        id: data.marine.id,
+        name: data.marine.name,
+        scientificName: data.marine.scientific_name,
+        rarity: data.marine.rarity,
+        sizeMinCm: data.marine.size_min_cm,
+        sizeMaxCm: data.marine.size_max_cm,
+        habitatType: data.marine.habitat_type,
+        diet: data.marine.diet,
+        behavior: data.marine.behavior,
+        description: data.marine.description,
+        imageUrl: data.marine.image_url
+      } : null,
+      photos: data.collection_photos?.map((photo: any) => ({
+        id: photo.id,
+        url: photo.url,
+        annotatedUrl: photo.annotated_url,
+        dateFound: photo.date_found,
+        spotId: photo.spot_id,
+        confidence: photo.confidence,
+        boundingBox: photo.bounding_box,
+        notes: photo.notes
+      })) || []
     };
   }
 
@@ -696,6 +847,17 @@ export class DatabaseService {
       mimeType: data.mime_type,
       createdAt: data.created_at
     };
+  }
+
+  // Update collection last seen timestamp
+  async updateCollectionLastSeen(id: number, deviceId: string) {
+    const { error } = await this.client
+      .from('collections')
+      .update({ last_seen: new Date().toISOString() })
+      .eq('id', id)
+      .eq('device_id', deviceId);
+
+    if (error) throw error;
   }
 
   // Delete collection

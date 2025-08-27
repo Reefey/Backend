@@ -17,6 +17,93 @@ export class StorageService {
     return `${prefix}${timestamp}_${random}.${extension}`;
   }
 
+  // Process image from either binary buffer or base64 string
+  async processImageInput(imageInput: Buffer | string, originalName: string = 'image.jpg'): Promise<{
+    buffer: Buffer;
+    mimeType: string;
+    filename: string;
+    size: number;
+  }> {
+    let buffer: Buffer;
+    let mimeType: string = 'image/jpeg';
+    let filename: string = originalName;
+
+    if (typeof imageInput === 'string') {
+      // Handle base64 input
+      if (imageInput.startsWith('data:image/')) {
+        // Data URL format: data:image/jpeg;base64,/9j/4AAQ...
+        const matches = imageInput.match(/^data:([^;]+);base64,(.+)$/);
+        if (!matches) {
+          throw new Error('Invalid data URL format');
+        }
+        
+        mimeType = matches[1] || 'image/jpeg';
+        const base64Data = matches[2];
+        if (!base64Data) {
+          throw new Error('Invalid data URL format: missing base64 data');
+        }
+        buffer = Buffer.from(base64Data, 'base64');
+        
+        // Extract filename from mime type
+        const extension = mimeType.split('/')[1] || 'jpg';
+        filename = `base64_image.${extension}`;
+      } else {
+        // Plain base64 string
+        try {
+          buffer = Buffer.from(imageInput, 'base64');
+          // Try to detect mime type from buffer
+          const fileSignature = buffer.slice(0, 4).toString('hex').toUpperCase();
+          if (fileSignature.startsWith('FFD8')) {
+            mimeType = 'image/jpeg';
+            filename = 'base64_image.jpg';
+          } else if (fileSignature.startsWith('89504E47')) {
+            mimeType = 'image/png';
+            filename = 'base64_image.png';
+          } else if (fileSignature.startsWith('47494638')) {
+            mimeType = 'image/gif';
+            filename = 'base64_image.gif';
+          } else if (fileSignature.startsWith('52494646')) {
+            mimeType = 'image/webp';
+            filename = 'base64_image.webp';
+          } else {
+            // Default to JPEG
+            mimeType = 'image/jpeg';
+            filename = 'base64_image.jpg';
+          }
+        } catch (error) {
+          throw new Error('Invalid base64 string');
+        }
+      }
+    } else {
+      // Handle binary buffer input
+      buffer = imageInput;
+      // For binary input, we'll use the original filename and detect mime type
+      const fileSignature = buffer.slice(0, 4).toString('hex').toUpperCase();
+      if (fileSignature.startsWith('FFD8')) {
+        mimeType = 'image/jpeg';
+      } else if (fileSignature.startsWith('89504E47')) {
+        mimeType = 'image/png';
+      } else if (fileSignature.startsWith('47494638')) {
+        mimeType = 'image/gif';
+      } else if (fileSignature.startsWith('52494646')) {
+        mimeType = 'image/webp';
+      }
+    }
+
+    // Validate and convert image to JPEG
+    try {
+      const { buffer: validatedBuffer } = await this.validateAndConvertImage(buffer);
+      return {
+        buffer: validatedBuffer,
+        mimeType: 'image/jpeg',
+        filename: filename.replace(/\.[^/.]+$/, '.jpg'),
+        size: validatedBuffer.length
+      };
+    } catch (error) {
+      throw new Error(`Image processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
   // Convert image format (e.g., HEIC to JPEG)
   async convertImage(buffer: Buffer, format: 'jpeg' | 'png' | 'webp' = 'jpeg'): Promise<Buffer> {
     try {

@@ -9,6 +9,7 @@ import swaggerJsdoc from 'swagger-jsdoc';
 import { config } from './config/global';
 import { swaggerOptions } from './utils/swagger';
 import { errorHandler, notFound } from './middleware/errorHandler';
+import { requestLogger } from './middleware/requestLogger';
 
 // Import routes
 import spotsRoutes from './routes/spots';
@@ -34,7 +35,7 @@ app.use(cors(config.cors));
 const limiter = rateLimit(config.rateLimit);
 app.use('/api/', limiter);
 
-// Logging middleware
+// Morgan logging middleware (additional)
 if (config.nodeEnv === 'development') {
   app.use(morgan('dev'));
 } else {
@@ -42,8 +43,11 @@ if (config.nodeEnv === 'development') {
 }
 
 // Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Custom request logging middleware (after body parsing)
+app.use(requestLogger);
 
 // Swagger documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));

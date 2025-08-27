@@ -5,10 +5,10 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "NODE_ENV=production tsc",
-    "start": "NODE_ENV=production node dist/index.js",
+    "start": "NODE_ENV=production node --max-old-space-size=4096 dist/index.js",
     "test:env": "ts-node src/config/test-env.ts",
     "test:supabase": "ts-node src/config/test-supabase.ts",
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev": "ts-node-dev --respawn --transpile-only --max-old-space-size=4096 src/index.ts",
     "clean": "rm -rf dist"
   },
   "author": "Apple CH4 Team",

@@ -155,7 +155,7 @@ https://{project-id}.supabase.co/storage/v1/object/public/reefey-photos/{file-pa
 
 ### 1. Image Validation
 - Check file type (JPEG, PNG, HEIC, WebP)
-- Validate file size (max 10MB)
+- Validate file size (max 50MB)
 - Extract metadata (GPS, timestamp)
 
 ### 2. Image Preprocessing
@@ -197,7 +197,7 @@ https://{project-id}.supabase.co/storage/v1/object/public/reefey-photos/{file-pa
 
 ### File Security
 - **Type Validation**: Strict MIME type checking
-- **Size Limits**: 10MB maximum file size
+- **Size Limits**: 50MB maximum file size
 - **Content Validation**: Image content verification
 - **Sanitized Names**: Safe filename generation
 
@@ -220,7 +220,7 @@ OPENAI_API_KEY=your-openai-api-key
 # AI Configuration
 AI_RATE_LIMIT_PER_DAY=10
 AI_CONFIDENCE_THRESHOLD=0.7
-AI_MAX_FILE_SIZE=10485760
+AI_MAX_FILE_SIZE=52428800
 AI_TIMEOUT=30000
 ```
 

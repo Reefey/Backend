@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import multer from 'multer';
-import { validateQuery } from '../middleware/validation';
+import { validateQuery, validate } from '../middleware/validation';
 import { schemas } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
 import { DatabaseService } from '../utils/database';
@@ -25,7 +25,7 @@ const upload = multer({
     }
   },
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB
+    fileSize: 50 * 1024 * 1024 // 50MB
   }
 });
 
@@ -41,7 +41,7 @@ const uploadMultiple = multer({
     }
   },
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB per file
+    fileSize: 50 * 1024 * 1024, // 50MB per file
     files: 10 // Maximum 10 files per request
   }
 });
@@ -196,23 +196,41 @@ router.post('/batch-analyze-photos',
         const collectionEntries = [];
         
         for (const detection of analysis.detections) {
-          // Create collection entry
-          const collectionData: any = {
-            deviceId,
-            status: 'identified',
-            firstSeen: new Date().toISOString(),
-            lastSeen: new Date().toISOString()
-          };
-
-          if (detection.databaseId) {
-            collectionData.marineId = detection.databaseId;
+          if (!detection.databaseId) {
+            continue; // Skip detections without database ID
           }
 
-          const collection = await db.createCollection(collectionData);
+          // Check if collection already exists for this marine species and device
+          const existingCollection = await db.findCollectionByMarineAndDevice(detection.databaseId, deviceId);
+
+          let collectionId: number;
+          let isNewCollection = false;
+
+          if (existingCollection) {
+            // Use existing collection and update last seen timestamp
+            collectionId = existingCollection.id;
+            await db.updateCollectionLastSeen(existingCollection.id, deviceId);
+          } else {
+            // Create new collection entry
+            const collectionData: any = {
+              deviceId,
+              status: 'identified',
+              firstSeen: new Date().toISOString(),
+              lastSeen: new Date().toISOString()
+            };
+
+            if (detection.databaseId) {
+              collectionData.marineId = detection.databaseId;
+            }
+
+            const collection = await db.createCollection(collectionData);
+            collectionId = collection.id;
+            isNewCollection = true;
+          }
 
           // Add photo to collection
           const photoDataForDb: any = {
-            collectionId: collection.id,
+            collectionId: collectionId,
             url: photoData.originalUrl,
             dateFound: new Date().toISOString(),
             storageBucket: 'reefey-photos',
@@ -232,10 +250,12 @@ router.post('/batch-analyze-photos',
           const photo = await db.addPhotoToCollection(photoDataForDb);
 
           collectionEntries.push({
-            id: collection.id,
+            id: collectionId,
             marineId: detection.databaseId,
             name: detection.species,
             status: 'identified',
+            isNewCollection,
+            ...(detection.marineData && { marineData: detection.marineData }),
             photo: {
               url: photo.url,
               annotatedUrl: photo.annotatedUrl,
@@ -268,6 +288,341 @@ router.post('/batch-analyze-photos',
       message: `Batch analysis completed - ${batchResult.summary.successfulAnalyses}/${batchResult.summary.totalImages} images processed successfully`
     });
     return;
+  })
+);
+
+/**
+ * @swagger
+ * /api/ai/analyze-photo-base64:
+ *   post:
+ *     summary: Analyze base64 encoded photo to detect and identify marine life using AI
+ *     tags: [Intelligence]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               deviceId:
+ *                 type: string
+ *                 description: Device identifier
+ *               photo:
+ *                 type: string
+ *                 description: Base64 encoded image (data URL or plain base64)
+ *               spotId:
+ *                 type: integer
+ *                 description: Associated snorkeling spot ID
+ *               lat:
+ *                 type: number
+ *                 description: GPS latitude
+ *               lng:
+ *                 type: number
+ *                 description: GPS longitude
+ *     responses:
+ *       200:
+ *         description: Photo analyzed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     detections:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           species:
+ *                             type: string
+ *                           scientificName:
+ *                             type: string
+ *                           confidence:
+ *                             type: number
+ *                           confidenceReasoning:
+ *                             type: string
+ *                           wasInDatabase:
+ *                             type: boolean
+ *                           databaseId:
+ *                             type: integer
+ *                           description:
+ *                             type: string
+ *                           behavioralNotes:
+ *                             type: string
+ *                           sizeEstimate:
+ *                             type: string
+ *                           habitatContext:
+ *                             type: string
+ *                           interactions:
+ *                             type: string
+ *                           imageQuality:
+ *                             type: string
+ *                           estimatedCharacteristics:
+ *                             type: object
+ *                             properties:
+ *                               category:
+ *                                 type: string
+ *                                 enum: [Fishes, Creatures, Corals]
+ *                               sizeRange:
+ *                                 type: string
+ *                                 enum: [small, medium, large]
+ *                               habitatType:
+ *                                 type: array
+ *                                 items:
+ *                                   type: string
+ *                               diet:
+ *                                 type: string
+ *                               behavior:
+ *                                 type: string
+ *                               dangerLevel:
+ *                                 type: string
+ *                                 enum: [Low, Medium, High, Extreme]
+ *                               venomous:
+ *                                 type: boolean
+ *                               conservationStatus:
+ *                                 type: string
+ *                           marineData:
+ *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               name:
+ *                                 type: string
+ *                               scientificName:
+ *                                 type: string
+ *                               category:
+ *                                 type: string
+ *                                 enum: [Fishes, Creatures, Corals]
+ *                               rarity:
+ *                                 type: integer
+ *                               sizeMinCm:
+ *                                 type: number
+ *                               sizeMaxCm:
+ *                                 type: number
+ *                               habitatType:
+ *                                 type: array
+ *                                 items:
+ *                                   type: string
+ *                               diet:
+ *                                 type: string
+ *                               behavior:
+ *                                 type: string
+ *                               danger:
+ *                                 type: string
+ *                                 enum: [Low, Medium, High, Extreme]
+ *                               venomous:
+ *                                 type: boolean
+ *                               description:
+ *                                 type: string
+ *                               lifeSpan:
+ *                                 type: string
+ *                               reproduction:
+ *                                 type: string
+ *                               migration:
+ *                                 type: string
+ *                               endangered:
+ *                                 type: string
+ *                               funFact:
+ *                                 type: string
+ *                               imageUrl:
+ *                                 type: string
+ *                           instances:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 boundingBox:
+ *                                   type: object
+ *                                   properties:
+ *                                     x:
+ *                                       type: number
+ *                                     y:
+ *                                       type: number
+ *                                     width:
+ *                                       type: number
+ *                                     height:
+ *                                       type: number
+ *                                 confidence:
+ *                                   type: number
+ *                     unknownSpecies:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/UnknownSpecies'
+ *                     originalPhotoUrl:
+ *                       type: string
+ *                     annotatedPhotoUrl:
+ *                       type: string
+ *                     collectionEntries:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           marineId:
+ *                             type: integer
+ *                           name:
+ *                             type: string
+ *                           status:
+ *                             type: string
+ *                           marineData:
+ *                             type: object
+ *                             description: Enhanced marine species data from database
+ *                           photo:
+ *                             type: object
+ *                             properties:
+ *                               url:
+ *                                 type: string
+ *                               annotatedUrl:
+ *                                 type: string
+ *                               boundingBox:
+ *                                 type: object
+ *                 message:
+ *                   type: string
+ *       429:
+ *         description: Rate limit exceeded
+ */
+router.post('/analyze-photo-base64',
+  validate(schemas.base64AIAnalysis),
+  asyncHandler(async (req: Request, res: Response<ApiResponse>) => {
+    const deviceId = req.body['deviceId'];
+    
+    if (!deviceId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Device ID is required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    if (!req.body.photo) {
+      return res.status(400).json({
+        success: false,
+        error: 'Photo is required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    // Process base64 image
+    const processedFile = await storage.processImageInput(req.body.photo);
+
+    // Extract form data
+    const spotId = req.body['spotId'] ? parseInt(req.body['spotId']) : undefined;
+    const lat = req.body['lat'] ? parseFloat(req.body['lat']) : undefined;
+    const lng = req.body['lng'] ? parseFloat(req.body['lng']) : undefined;
+
+    // Check rate limit
+    const rateLimitInfo = aiService.getRateLimitInfo(deviceId);
+    if (rateLimitInfo.used >= rateLimitInfo.limit) {
+      return res.status(429).json({
+        success: false,
+        error: 'Rate limit exceeded',
+        code: 'RATE_LIMIT_EXCEEDED'
+      } as any);
+    }
+
+    // Analyze image with AI
+    const analysis = await aiService.analyzeImage(processedFile.buffer, deviceId);
+
+    // Upload original photo and create annotated version using the processed buffer
+    const photoData = await storage.uploadCollectionPhoto(
+      {
+        buffer: processedFile.buffer,
+        mimetype: processedFile.mimeType,
+        originalname: processedFile.filename,
+        size: processedFile.size
+      } as Express.Multer.File,
+      deviceId,
+      'ai_analysis',
+      0, // Use 0 as default collection ID
+      analysis.detections, // Pass detections for annotated image creation
+      analysis.processedImageBuffer // Use the exact same buffer that AI analyzed
+    );
+
+    // Create collection entries for each detected species
+    const collectionEntries = [];
+    
+    for (const detection of analysis.detections) {
+      if (!detection.databaseId) {
+        continue; // Skip detections without database ID
+      }
+
+      // Check if collection already exists for this marine species and device
+      const existingCollection = await db.findCollectionByMarineAndDevice(detection.databaseId, deviceId);
+
+      let collectionId: number;
+      let isNewCollection = false;
+
+      if (existingCollection) {
+        // Use existing collection and update last seen timestamp
+        collectionId = existingCollection.id;
+        await db.updateCollectionLastSeen(existingCollection.id, deviceId);
+      } else {
+        // Create new collection entry
+        const collectionData: any = {
+          deviceId,
+          status: 'identified',
+          firstSeen: new Date().toISOString(),
+          lastSeen: new Date().toISOString()
+        };
+
+        if (detection.databaseId) {
+          collectionData.marineId = detection.databaseId;
+        }
+
+        const collection = await db.createCollection(collectionData);
+        collectionId = collection.id;
+        isNewCollection = true;
+      }
+
+      // Add photo to collection
+      const photoDataForDb: any = {
+        collectionId: collectionId,
+        url: photoData.originalUrl,
+        dateFound: new Date().toISOString(),
+        storageBucket: 'reefey-photos',
+        filePath: photoData.filePath,
+        fileSize: processedFile.size,
+        mimeType: processedFile.mimeType
+      };
+
+      if (photoData.annotatedUrl) photoDataForDb.annotatedUrl = photoData.annotatedUrl;
+      if (spotId) photoDataForDb.spotId = spotId;
+      if (lat) photoDataForDb.lat = lat;
+      if (lng) photoDataForDb.lng = lng;
+      if (detection.instances[0]?.boundingBox) {
+        photoDataForDb.boundingBox = detection.instances[0].boundingBox;
+      }
+
+      await db.addPhotoToCollection(photoDataForDb);
+
+      collectionEntries.push({
+        id: collectionId,
+        species: detection.species,
+        status: isNewCollection ? 'new' : 'existing',
+        ...(detection.marineData && { marineData: detection.marineData }),
+        photoUrl: photoData.originalUrl,
+        boundingBox: detection.instances[0]?.boundingBox
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        detections: analysis.detections,
+        unknownSpecies: analysis.unknownSpecies,
+        originalPhotoUrl: photoData.originalUrl,
+        annotatedPhotoUrl: photoData.annotatedUrl,
+        collectionEntries,
+        ...(analysis.imageAnalysis && { imageAnalysis: analysis.imageAnalysis }),
+        ...(analysis.annotationMetadata && { annotationMetadata: analysis.annotationMetadata })
+      },
+      message: 'Photo analyzed successfully'
+    });
   })
 );
 
@@ -411,25 +766,42 @@ router.post('/analyze-photo',
     const collectionEntries = [];
     
     for (const detection of analysis.detections) {
-      // Create collection entry
-      const collectionData: any = {
-        deviceId,
-        status: 'identified',
-        firstSeen: new Date().toISOString(),
-        lastSeen: new Date().toISOString()
-      };
-
-      if (detection.databaseId) {
-        collectionData.marineId = detection.databaseId;
+      if (!detection.databaseId) {
+        continue; // Skip detections without database ID
       }
 
-      const collection = await db.createCollection(collectionData);
+      // Check if collection already exists for this marine species and device
+      const existingCollection = await db.findCollectionByMarineAndDevice(detection.databaseId, deviceId);
+
+      let collectionId: number;
+      let isNewCollection = false;
+
+      if (existingCollection) {
+        // Use existing collection and update last seen timestamp
+        collectionId = existingCollection.id;
+        await db.updateCollectionLastSeen(existingCollection.id, deviceId);
+      } else {
+        // Create new collection entry
+        const collectionData: any = {
+          deviceId,
+          status: 'identified',
+          firstSeen: new Date().toISOString(),
+          lastSeen: new Date().toISOString()
+        };
+
+        if (detection.databaseId) {
+          collectionData.marineId = detection.databaseId;
+        }
+
+        const collection = await db.createCollection(collectionData);
+        collectionId = collection.id;
+        isNewCollection = true;
+      }
 
       // Add photo to collection
       const photoDataForDb: any = {
-        collectionId: collection.id,
+        collectionId: collectionId,
         url: photoData.originalUrl,
-
         dateFound: new Date().toISOString(),
         storageBucket: 'reefey-photos',
         filePath: photoData.filePath,
@@ -445,16 +817,18 @@ router.post('/analyze-photo',
         photoDataForDb.boundingBox = detection.instances[0].boundingBox;
       }
 
-      const photo = await db.addPhotoToCollection(photoDataForDb);
+      await db.addPhotoToCollection(photoDataForDb);
 
       collectionEntries.push({
-        id: collection.id,
+        id: collectionId,
         marineId: detection.databaseId,
         name: detection.species,
         status: 'identified',
+        isNewCollection,
+        ...(detection.marineData && { marineData: detection.marineData }),
         photo: {
-          url: photo.url,
-          annotatedUrl: photo.annotatedUrl,
+          url: photoData.originalUrl,
+          annotatedUrl: photoData.annotatedUrl,
           boundingBox: detection.instances[0]?.boundingBox || { x: 0, y: 0, width: 100, height: 100 }
         }
       });
@@ -630,25 +1004,42 @@ router.post('/analyze-photo-url',
       const collectionEntries = [];
       
       for (const detection of analysis.detections) {
-        // Create collection entry
-        const collectionData: any = {
-          deviceId,
-          status: 'identified',
-          firstSeen: new Date().toISOString(),
-          lastSeen: new Date().toISOString()
-        };
-
-        if (detection.databaseId) {
-          collectionData.marineId = detection.databaseId;
+        if (!detection.databaseId) {
+          continue; // Skip detections without database ID
         }
 
-        const collection = await db.createCollection(collectionData);
+        // Check if collection already exists for this marine species and device
+        const existingCollection = await db.findCollectionByMarineAndDevice(detection.databaseId, deviceId);
+
+        let collectionId: number;
+        let isNewCollection = false;
+
+        if (existingCollection) {
+          // Use existing collection and update last seen timestamp
+          collectionId = existingCollection.id;
+          await db.updateCollectionLastSeen(existingCollection.id, deviceId);
+        } else {
+          // Create new collection entry
+          const collectionData: any = {
+            deviceId,
+            status: 'identified',
+            firstSeen: new Date().toISOString(),
+            lastSeen: new Date().toISOString()
+          };
+
+          if (detection.databaseId) {
+            collectionData.marineId = detection.databaseId;
+          }
+
+          const collection = await db.createCollection(collectionData);
+          collectionId = collection.id;
+          isNewCollection = true;
+        }
 
         // Add photo to collection
         const photoDataForDb: any = {
-          collectionId: collection.id,
+          collectionId: collectionId,
           url: photoData.originalUrl,
-
           dateFound: new Date().toISOString(),
           storageBucket: 'reefey-photos',
           filePath: photoData.filePath,
@@ -664,16 +1055,18 @@ router.post('/analyze-photo-url',
           photoDataForDb.boundingBox = detection.instances[0].boundingBox;
         }
 
-        const photo = await db.addPhotoToCollection(photoDataForDb);
+        await db.addPhotoToCollection(photoDataForDb);
 
         collectionEntries.push({
-          id: collection.id,
+          id: collectionId,
           marineId: detection.databaseId,
           name: detection.species,
           status: 'identified',
+          isNewCollection,
+          ...(detection.marineData && { marineData: detection.marineData }),
           photo: {
-            url: photo.url,
-            annotatedUrl: photo.annotatedUrl,
+            url: photoData.originalUrl,
+            annotatedUrl: photoData.annotatedUrl,
             boundingBox: detection.instances[0]?.boundingBox || { x: 0, y: 0, width: 100, height: 100 }
           }
         });

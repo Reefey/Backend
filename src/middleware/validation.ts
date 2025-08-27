@@ -94,6 +94,105 @@ export const schemas = {
     lng: Joi.number().optional().min(-180).max(180)
   }),
 
+  // Base64 image upload
+  base64ImageUpload: Joi.object({
+    deviceId: Joi.string().required(),
+    photo: Joi.string().required().custom((value, helpers) => {
+      // Validate base64 format
+      if (value.startsWith('data:image/')) {
+        // Data URL format
+        const matches = value.match(/^data:([^;]+);base64,(.+)$/);
+        if (!matches || !matches[2]) {
+          return helpers.error('any.invalid');
+        }
+        try {
+          Buffer.from(matches[2], 'base64');
+          return value;
+        } catch {
+          return helpers.error('any.invalid');
+        }
+      } else {
+        // Plain base64 string
+        try {
+          Buffer.from(value, 'base64');
+          return value;
+        } catch {
+          return helpers.error('any.invalid');
+        }
+      }
+    }, 'base64-image'),
+    spotId: Joi.number().optional(),
+    lat: Joi.number().optional().min(-90).max(90),
+    lng: Joi.number().optional().min(-180).max(180),
+    dateFound: Joi.string().isoDate().optional(),
+    notes: Joi.string().optional()
+  }),
+
+  // Base64 collection photo
+  base64CollectionPhoto: Joi.object({
+    photo: Joi.string().required().custom((value, helpers) => {
+      // Validate base64 format
+      if (value.startsWith('data:image/')) {
+        // Data URL format
+        const matches = value.match(/^data:([^;]+);base64,(.+)$/);
+        if (!matches || !matches[2]) {
+          return helpers.error('any.invalid');
+        }
+        try {
+          Buffer.from(matches[2], 'base64');
+          return value;
+        } catch {
+          return helpers.error('any.invalid');
+        }
+      } else {
+        // Plain base64 string
+        try {
+          Buffer.from(value, 'base64');
+          return value;
+        } catch {
+          return helpers.error('any.invalid');
+        }
+      }
+    }, 'base64-image'),
+    spotId: Joi.number().optional(),
+    lat: Joi.number().optional().min(-90).max(90),
+    lng: Joi.number().optional().min(-180).max(180),
+    dateFound: Joi.string().isoDate().optional(),
+    notes: Joi.string().optional()
+  }),
+
+  // Base64 AI analysis
+  base64AIAnalysis: Joi.object({
+    deviceId: Joi.string().required(),
+    photo: Joi.string().required().custom((value, helpers) => {
+      // Validate base64 format
+      if (value.startsWith('data:image/')) {
+        // Data URL format
+        const matches = value.match(/^data:([^;]+);base64,(.+)$/);
+        if (!matches || !matches[2]) {
+          return helpers.error('any.invalid');
+        }
+        try {
+          Buffer.from(matches[2], 'base64');
+          return value;
+        } catch {
+          return helpers.error('any.invalid');
+        }
+      } else {
+        // Plain base64 string
+        try {
+          Buffer.from(value, 'base64');
+          return value;
+        } catch {
+          return helpers.error('any.invalid');
+        }
+      }
+    }, 'base64-image'),
+    spotId: Joi.number().optional(),
+    lat: Joi.number().optional().min(-90).max(90),
+    lng: Joi.number().optional().min(-180).max(180)
+  }),
+
   // Collection photo
   addPhotoToCollection: Joi.object({
     spotId: Joi.number().optional(),
@@ -125,7 +224,7 @@ export const schemas = {
     sizeMax: Joi.number().optional().min(0),
     danger: Joi.string().valid('Low', 'Medium', 'High', 'Extreme').optional(),
     venomous: Joi.boolean().optional(),
-    sort: Joi.string().valid('name', 'rarity', 'sizeMin', 'sizeMax', 'category').optional(),
+    sort: Joi.string().valid('name', 'rarity', 'sizeMin', 'sizeMax', 'category', 'collected').optional(),
     page: Joi.number().optional().min(1),
     size: Joi.number().optional().min(1).max(100)
   }),

@@ -586,7 +586,7 @@ Health check endpoint.
 
 ### Supported Formats
 - **Images**: JPEG, PNG, HEIC, WebP
-- **Max Size**: 10MB per file
+- **Max Size**: 50MB per file
 - **Storage**: Supabase Storage bucket
 
 ### File Organization

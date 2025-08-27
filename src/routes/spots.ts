@@ -3,6 +3,7 @@ import { db } from '../utils/database';
 import { asyncHandler } from '../middleware/errorHandler';
 import { validate, validateQuery, validateParams, schemas } from '../middleware/validation';
 import { ApiResponse, PaginationResponse, Spot } from '../types/model';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -73,6 +74,9 @@ const router = Router();
 router.get('/', 
   validateQuery(schemas.spotsQuery),
   asyncHandler(async (req: Request, res: Response<PaginationResponse<Spot>>) => {
+    const startTime = Date.now();
+    logger.apiRequest('GET', '/api/spots', req.query);
+    
     const params: any = {};
     
     if (req.query['lat']) params.lat = parseFloat(req.query['lat'] as string);
@@ -89,7 +93,9 @@ router.get('/',
     params.page = params.page || 1;
     params.size = params.size || 50;
 
+    logger.dbQuery('SELECT', 'spots', params);
     const result = await db.getSpots(params);
+    logger.dbResult('SELECT', 'spots', { count: result.data.length, total: result.total });
 
     // Transform data to match API response format with camelCase
     const transformedData = result.data.map((spot: any) => ({
@@ -101,6 +107,9 @@ router.get('/',
         undefined
     }));
 
+    const responseTime = Date.now() - startTime;
+    logger.apiResponse('GET', '/api/spots', 200, responseTime);
+    
     res.json({
       success: true,
       data: transformedData,

@@ -17,7 +17,7 @@ Complete setup guide for creating a Supabase instance for the Reefey snorkeling 
 1. Go to "Storage" in Supabase dashboard
 2. Create bucket: `reefey-photos`
    - Public bucket: ✅
-   - File size limit: 10MB
+   - File size limit: 50MB
    - Allowed MIME types: `image/*`
 
 ## Step 3: Database Setup

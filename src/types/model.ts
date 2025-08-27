@@ -145,11 +145,11 @@ export interface CollectionsQueryParams {
 // AI Types
 export interface AIDetection {
   species: string;
-  scientificName?: string;
+  scientificName?: string | undefined;
   confidence: number;
   confidenceReasoning?: string;
   wasInDatabase: boolean;
-  databaseId?: number;
+  databaseId?: number | undefined;
   instances: AIDetectionInstance[];
   description?: string;
   behavioralNotes?: string;
@@ -157,6 +157,17 @@ export interface AIDetection {
   habitatContext?: string;
   interactions?: string;
   imageQuality?: string;
+  estimatedCharacteristics?: {
+    category?: 'Fishes' | 'Creatures' | 'Corals';
+    sizeRange?: 'small' | 'medium' | 'large';
+    habitatType?: string[];
+    diet?: string;
+    behavior?: string;
+    dangerLevel?: 'Low' | 'Medium' | 'High' | 'Extreme';
+    venomous?: boolean;
+    conservationStatus?: string;
+  };
+  marineData?: Marine; // Enhanced marine species data from database
 }
 
 export interface AIDetectionInstance {
@@ -178,11 +189,11 @@ export interface UnknownSpecies {
 }
 
 export interface ImageAnalysis {
-  overallQuality: 'excellent' | 'good' | 'fair' | 'poor';
-  lightingConditions: 'bright' | 'moderate' | 'dim' | 'mixed';
-  waterClarity: 'clear' | 'moderate' | 'turbid';
-  depthEstimate: 'shallow' | 'medium' | 'deep';
-  habitatType: 'reef' | 'sand' | 'seagrass' | 'mixed';
+  overallQuality: 'excellent' | 'good' | 'fair' | 'poor' | 'unknown';
+  lightingConditions: 'bright' | 'moderate' | 'dim' | 'mixed' | 'unknown';
+  waterClarity: 'clear' | 'moderate' | 'turbid' | 'unknown';
+  depthEstimate: 'shallow' | 'medium' | 'deep' | 'unknown';
+  habitatType: 'reef' | 'sand' | 'seagrass' | 'mixed' | 'unknown';
 }
 
 export interface AnnotationMetadata {
@@ -190,7 +201,7 @@ export interface AnnotationMetadata {
   identifiedSpecies: number;
   unknownSpecies: number;
   averageConfidence: number;
-  annotationQuality: 'high' | 'medium' | 'low';
+  annotationQuality: 'high' | 'medium' | 'low' | 'restricted' | 'failed';
   processingNotes?: string;
 }
 
@@ -210,6 +221,7 @@ export interface CollectionEntry {
   marineId?: number;
   name: string;
   status: string;
+  marineData?: Marine; // Enhanced marine species data from database
   photo: {
     url: string;
     annotatedUrl?: string;
