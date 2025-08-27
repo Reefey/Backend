@@ -24,6 +24,9 @@ export interface Marine {
   behavior?: string;
   danger: 'Low' | 'Medium' | 'High' | 'Extreme';
   venomous: boolean;
+  edibility?: boolean;
+  poisonous?: boolean;
+  endangeredd?: boolean;
   description?: string;
   lifeSpan?: string;
   reproduction?: string;
@@ -124,6 +127,9 @@ export interface MarineQueryParams {
   sizeMax?: number;
   danger?: 'Low' | 'Medium' | 'High' | 'Extreme';
   venomous?: boolean;
+  edibility?: boolean;
+  poisonous?: boolean;
+  endangeredd?: boolean;
   sort?: 'name' | 'rarity' | 'sizeMin' | 'sizeMax' | 'category';
   page?: number;
   size?: number;

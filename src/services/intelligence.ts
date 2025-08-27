@@ -92,8 +92,7 @@ export class AIService {
     _deviceId: string,
     _spotId?: number,
     _lat?: number,
-    _lng?: number,
-    aiResponse?: string
+    _lng?: number
   ): Promise<AIAnalysisResponse> {
     console.log('🔄 Using fallback analysis - AI service unavailable or refused analysis');
     
@@ -101,22 +100,15 @@ export class AIService {
       // Try to extract basic image information
       await this.extractBasicImageInfo(imageBuffer);
       
-      // Check if this was an AI refusal
-      const isRefusal = aiResponse && this.isAIRefusalResponse(aiResponse);
-      
       // Create a basic fallback response
       const fallbackDetection: AIDetection = {
-        species: isRefusal ? 'Content Not Analyzable' : 'Unknown Marine Life',
+        species: 'Unknown Marine Life',
         scientificName: undefined,
         confidence: 0.1,
-        confidenceReasoning: isRefusal 
-          ? 'AI refused to analyze image due to policy restrictions' 
-          : 'Fallback analysis - AI service unavailable',
+        confidenceReasoning: 'Fallback analysis - AI service unavailable',
         wasInDatabase: false,
         databaseId: undefined,
-        description: isRefusal 
-          ? 'Image content could not be analyzed due to AI policy restrictions. Please ensure the image contains only marine life and no recognizable individuals.'
-          : 'Unable to identify species due to AI service unavailability',
+        description: 'Unable to identify species due to AI service unavailability',
         behavioralNotes: 'No behavioral observations available',
         sizeEstimate: 'Unknown',
         habitatContext: 'Underwater environment',
@@ -302,14 +294,8 @@ export class AIService {
     } catch (error) {
       console.error('AI analysis failed, using fallback:', error);
       
-      // Try to extract AI response from error if available
-      let aiResponse: string | undefined;
-      if (error instanceof Error && error.message.includes('No response from AI service')) {
-        aiResponse = 'AI service returned empty response';
-      }
-      
       // Use fallback analysis
-      return await this.fallbackAnalysis(imageBuffer, deviceId, spotId, lat, lng, aiResponse);
+      return await this.fallbackAnalysis(imageBuffer, deviceId, spotId, lat, lng);
     }
   }
 
@@ -321,12 +307,6 @@ export class AIService {
     annotationMetadata?: AnnotationMetadata;
   }> {
     try {
-      // Check if AI refused to analyze the image
-      if (this.isAIRefusalResponse(content)) {
-        console.log('🔄 AI refused to analyze image, using refusal fallback');
-        return this.createRefusalFallbackResponse(content);
-      }
-      
       return this.parseAIResponse(content);
     } catch (error) {
       console.warn('Failed to parse AI response, attempting recovery:', error);
@@ -334,76 +314,6 @@ export class AIService {
       // Try to extract partial information from the response
       return this.recoverPartialResponse(content);
     }
-  }
-
-  // Check if AI refused to analyze the image
-  private isAIRefusalResponse(content: string): boolean {
-    const refusalKeywords = [
-      'unable to analyze',
-      'privacy and policy reasons',
-      'recognizable individuals',
-      'policy reasons',
-      'cannot analyze',
-      'unable to provide',
-      'due to privacy',
-      'policy restrictions',
-      'not appropriate',
-      'cannot process'
-    ];
-    
-    const lowerContent = content.toLowerCase();
-    return refusalKeywords.some(keyword => lowerContent.includes(keyword));
-  }
-
-  // Create fallback response when AI refuses to analyze
-  private createRefusalFallbackResponse(aiResponse: string): {
-    detections: AIDetection[];
-    unknownSpecies: UnknownSpecies[];
-    imageAnalysis?: ImageAnalysis;
-    annotationMetadata?: AnnotationMetadata;
-  } {
-    console.log('🔄 Creating refusal fallback response');
-    
-    // Create a generic unknown species detection
-    const unknownSpecies: UnknownSpecies[] = [{
-      description: 'Image content could not be analyzed due to AI policy restrictions. Please ensure the image contains only marine life and no recognizable individuals.',
-      behavioralNotes: 'No behavioral observations available due to analysis restrictions',
-      sizeCharacteristics: 'Size cannot be determined',
-      colorPatterns: 'Color analysis unavailable',
-      habitatPosition: 'Underwater environment',
-      similarSpecies: [],
-      gptResponse: aiResponse,
-      confidence: 0.1,
-      confidenceReasoning: 'AI refused to analyze image due to policy restrictions',
-      instances: [{
-        boundingBox: { x: 0.250, y: 0.250, width: 0.500, height: 0.500 },
-        confidence: 0.1
-      }]
-    }];
-
-    const imageAnalysis: ImageAnalysis = {
-      overallQuality: 'unknown',
-      lightingConditions: 'unknown',
-      waterClarity: 'unknown',
-      depthEstimate: 'unknown',
-      habitatType: 'unknown'
-    };
-
-    const annotationMetadata: AnnotationMetadata = {
-      totalDetections: 1,
-      identifiedSpecies: 0,
-      unknownSpecies: 1,
-      averageConfidence: 0.1,
-      annotationQuality: 'restricted',
-      processingNotes: 'AI refused to analyze image due to privacy/policy restrictions. Please ensure image contains only marine life.'
-    };
-
-    return {
-      detections: [],
-      unknownSpecies,
-      imageAnalysis,
-      annotationMetadata
-    };
   }
 
   // Recover partial information from malformed AI response
@@ -624,12 +534,6 @@ export class AIService {
   // Create analysis prompt for GPT
   private createAnalysisPrompt(): string {
     return `You are an expert marine biologist and computer vision specialist with advanced annotation capabilities. Your task is to comprehensively analyze underwater photos and provide detailed annotations for both visual elements and structured data.
-
-IMPORTANT - ACCEPTABLE IMAGE CONTENT:
-- ONLY analyze images that contain marine life (fish, coral, sea creatures, underwater environments)
-- If the image contains recognizable human faces, people, or non-marine content, provide a clear explanation of why analysis cannot proceed
-- Focus on marine biology and underwater photography content only
-- Do NOT analyze images with people, boats, or non-marine subjects
 
 ANNOTATION CAPABILITIES:
 1. VISUAL ANNOTATION: Precise bounding box detection with species location relative to the image
@@ -943,6 +847,9 @@ CRITICAL REQUIREMENTS:
           behavior: existingMarine.behavior,
           danger: existingMarine.danger,
           venomous: existingMarine.venomous,
+          edibility: existingMarine.edibility,
+          poisonous: existingMarine.poisonous,
+          endangeredd: existingMarine.endangeredd,
           description: existingMarine.description,
           lifeSpan: existingMarine.lifeSpan,
           reproduction: existingMarine.reproduction,
@@ -1028,6 +935,9 @@ CRITICAL REQUIREMENTS:
               behavior: newMarine.behavior,
               danger: newMarine.danger,
               venomous: newMarine.venomous,
+              edibility: newMarine.edibility,
+              poisonous: newMarine.poisonous,
+              endangeredd: newMarine.endangeredd,
               description: newMarine.description,
               lifeSpan: newMarine.lifeSpan,
               reproduction: newMarine.reproduction,
@@ -1078,29 +988,92 @@ CRITICAL REQUIREMENTS:
   // Get detailed species information from AI
   async getSpeciesDetails(speciesName: string): Promise<any> {
     try {
-      const prompt = `You are a marine biology expert. Provide detailed information about this marine species: ${speciesName}
+      const prompt = `You are a marine biology expert specializing in Indo-Pacific marine life, particularly around Bali and Indonesia. Provide comprehensive information about this marine species: ${speciesName}
 
-Please provide:
-1. Scientific name
-2. Category (Fishes, Creatures, Corals)
-3. Typical size range (min-max cm)
-4. Habitat types
-5. Diet
-6. Behavior patterns
-7. Danger level (Low/Medium/High/Extreme)
-8. Venomous status (true/false)
-9. Life span
-10. Reproduction method
-11. Migration patterns
-12. Conservation status
-13. Interesting facts
+COMPREHENSIVE DATA REQUIREMENTS:
 
-Return as JSON structure matching our database schema.`;
+Return a JSON object with EXACTLY these fields to match our database schema:
+
+{
+  "name": "Common name (standardized)",
+  "scientificName": "Scientific name with proper formatting",
+  "category": "Fishes|Creatures|Corals",
+  "rarity": 1-5 (1=extremely rare, 5=very common),
+  "sizeMinCm": number (minimum size in cm),
+  "sizeMaxCm": number (maximum size in cm),
+  "habitatType": ["array", "of", "habitat", "types"],
+  "diet": "Detailed diet description",
+  "behavior": "Behavioral patterns and characteristics",
+  "danger": "Low|Medium|High|Extreme",
+  "venomous": boolean,
+  "edibility": boolean,
+  "poisonous": boolean,
+  "endangeredd": boolean,
+  "description": "Comprehensive species description",
+  "lifeSpan": "Life span description",
+  "reproduction": "Reproduction method and details",
+  "migration": "Migration patterns and movement",
+  "endangered": "Conservation status (e.g., 'Least Concern', 'Vulnerable', 'Endangered')",
+  "funFact": "Interesting or unique fact about the species"
+}
+
+DETAILED FIELD REQUIREMENTS:
+
+1. **name**: Standardized common name
+2. **scientificName**: Properly formatted scientific name (Genus species)
+3. **category**: Must be exactly "Fishes", "Creatures", or "Corals"
+4. **rarity**: Integer 1-5 based on frequency in Bali/Indonesia waters
+   - 1: Extremely rare (sperm whale, saltwater crocodile)
+   - 2: Rare (manta rays, some sharks)
+   - 3: Uncommon (many reef fish, octopuses)
+   - 4: Common (clownfish, tangs, common reef fish)
+   - 5: Very common (damselfish, cleaner shrimp)
+5. **sizeMinCm/sizeMaxCm**: Numeric values in centimeters
+6. **habitatType**: Array of specific habitats (e.g., ["Coral Reefs", "Anemones", "Shallow reefs"])
+7. **diet**: Specific diet description (e.g., "Omnivore", "Carnivore", "Herbivore", "Zooplankton")
+8. **behavior**: Behavioral characteristics (e.g., "Social", "Solitary", "Nocturnal", "Territorial")
+9. **danger**: Must be exactly "Low", "Medium", "High", or "Extreme"
+10. **venomous**: Boolean (true/false)
+11. **edibility**: Boolean (true/false) - whether the species is edible for humans
+12. **poisonous**: Boolean (true/false) - whether the species is poisonous if consumed
+13. **endangeredd**: Boolean (true/false) - whether the species is endangered (note: different from "endangered" field)
+14. **description**: 2-3 sentence comprehensive description
+15. **lifeSpan**: Life span description (e.g., "6-10 years", "Decades", "1-2 years")
+16. **reproduction**: Reproduction details (e.g., "Egg laying", "Live birth", "Broadcast spawner")
+17. **migration**: Movement patterns (e.g., "Site-attached", "Local movements", "Long-distance")
+18. **endangered**: IUCN conservation status or similar
+19. **funFact**: One interesting fact about the species
+
+SPECIES-SPECIFIC GUIDELINES:
+
+- For fish: Include swimming patterns, social behavior, feeding habits
+- For creatures (octopuses, turtles, etc.): Include intelligence, movement, habitat preferences
+- For corals: Include growth patterns, symbiotic relationships, environmental requirements
+- For venomous species: Clearly indicate venomous status and danger level
+- For endangered species: Include conservation context
+- For Bali-specific species: Include local context and diving locations
+
+BOOLEAN FIELD GUIDELINES:
+
+- **venomous**: true if species has venomous spines, stings, or bites (e.g., lionfish, stonefish, sea snakes)
+- **edibility**: true if commonly consumed by humans (e.g., tuna, grouper, some reef fish)
+- **poisonous**: true if toxic when consumed (e.g., pufferfish, some sea cucumbers, toxic corals)
+- **endangeredd**: true if species is listed as endangered, vulnerable, or critically endangered by IUCN
+
+ACCURACY REQUIREMENTS:
+- Use scientific accuracy and current taxonomy
+- Base rarity on Indo-Pacific/Bali region frequency
+- Provide realistic size ranges based on actual species data
+- Include specific habitat types found in the region
+- Ensure all boolean fields are true/false, not strings
+- Ensure all numeric fields are numbers, not strings
+
+Return ONLY the JSON object, no additional text or explanations.`;
 
       const response = await this.openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 1000,
+        max_tokens: 2000,
         temperature: 0.1,
       });
 
@@ -1115,7 +1088,56 @@ Return as JSON structure matching our database schema.`;
         throw new Error('No JSON found in AI response');
       }
 
-      return JSON.parse(jsonMatch[0]);
+      const parsedData = JSON.parse(jsonMatch[0]);
+
+      // Validate and ensure all required fields are present
+      const requiredFields = [
+        'name', 'scientificName', 'category', 'rarity', 'sizeMinCm', 'sizeMaxCm',
+        'habitatType', 'diet', 'behavior', 'danger', 'venomous', 'edibility', 
+        'poisonous', 'endangeredd', 'description', 'lifeSpan', 'reproduction', 
+        'migration', 'endangered', 'funFact'
+      ];
+
+      for (const field of requiredFields) {
+        if (!(field in parsedData)) {
+          throw new Error(`Missing required field: ${field}`);
+        }
+      }
+
+      // Ensure proper data types
+      if (typeof parsedData.rarity !== 'number' || parsedData.rarity < 1 || parsedData.rarity > 5) {
+        parsedData.rarity = 3; // Default to uncommon if invalid
+      }
+
+      if (typeof parsedData.sizeMinCm !== 'number' || parsedData.sizeMinCm < 0) {
+        parsedData.sizeMinCm = 0;
+      }
+
+      if (typeof parsedData.sizeMaxCm !== 'number' || parsedData.sizeMaxCm < parsedData.sizeMinCm) {
+        parsedData.sizeMaxCm = parsedData.sizeMinCm + 10; // Default range
+      }
+
+      if (!Array.isArray(parsedData.habitatType)) {
+        parsedData.habitatType = [parsedData.habitatType || 'Unknown'];
+      }
+
+      if (typeof parsedData.venomous !== 'boolean') {
+        parsedData.venomous = false; // Default to non-venomous
+      }
+
+      if (typeof parsedData.edibility !== 'boolean') {
+        parsedData.edibility = false; // Default to non-edible
+      }
+
+      if (typeof parsedData.poisonous !== 'boolean') {
+        parsedData.poisonous = false; // Default to non-poisonous
+      }
+
+      if (typeof parsedData.endangeredd !== 'boolean') {
+        parsedData.endangeredd = false; // Default to not endangered
+      }
+
+      return parsedData;
 
     } catch (error) {
       throw new Error(`Failed to get species details: ${error instanceof Error ? error.message : 'Unknown error'}`);

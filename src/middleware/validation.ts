@@ -77,6 +77,9 @@ export const schemas = {
     behavior: Joi.string().optional().max(100),
     danger: Joi.string().valid('Low', 'Medium', 'High', 'Extreme').required(),
     venomous: Joi.boolean().default(false),
+    edibility: Joi.boolean().optional(),
+    poisonous: Joi.boolean().optional(),
+    endangeredd: Joi.boolean().optional(),
     description: Joi.string().optional(),
     lifeSpan: Joi.string().optional().max(100),
     reproduction: Joi.string().optional().max(200),
@@ -224,6 +227,9 @@ export const schemas = {
     sizeMax: Joi.number().optional().min(0),
     danger: Joi.string().valid('Low', 'Medium', 'High', 'Extreme').optional(),
     venomous: Joi.boolean().optional(),
+    edibility: Joi.boolean().optional(),
+    poisonous: Joi.boolean().optional(),
+    endangeredd: Joi.boolean().optional(),
     sort: Joi.string().valid('name', 'rarity', 'sizeMin', 'sizeMax', 'category', 'collected').optional(),
     page: Joi.number().optional().min(1),
     size: Joi.number().optional().min(1).max(100)
@@ -259,6 +265,11 @@ export const schemas = {
   deviceIdAndCollectionIdParam: Joi.object({
     deviceId: Joi.string().required(),
     collectionId: Joi.number().required().min(1)
+  }),
+
+  deviceIdAndMarineIdParam: Joi.object({
+    deviceId: Joi.string().required(),
+    marineId: Joi.number().required().min(1)
   }),
 
   deviceIdQuery: Joi.object({

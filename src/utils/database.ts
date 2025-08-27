@@ -226,11 +226,14 @@ export class DatabaseService {
     sizeMax?: number;
     danger?: string;
     venomous?: boolean;
+    edibility?: boolean;
+    poisonous?: boolean;
+    endangeredd?: boolean;
     sort?: string;
     page?: number;
     size?: number;
   }) {
-    const { q, rarity, category, habitat, diet, behavior, sizeMin, sizeMax, danger, venomous, sort = 'name', page = 1, size = 50 } = params;
+    const { q, rarity, category, habitat, diet, behavior, sizeMin, sizeMax, danger, venomous, edibility, poisonous, endangeredd, sort = 'name', page = 1, size = 50 } = params;
     const offset = (page - 1) * size;
 
     let query = this.client
@@ -251,6 +254,9 @@ export class DatabaseService {
     if (sizeMin) query = query.gte('size_min_cm', sizeMin);
     if (sizeMax) query = query.lte('size_max_cm', sizeMax);
     if (danger) query = query.eq('danger', danger);
+    if (edibility !== undefined) query = query.eq('edibility', edibility);
+    if (poisonous !== undefined) query = query.eq('poisonous', poisonous);
+    if (endangeredd !== undefined) query = query.eq('endangeredd', endangeredd);
     if (venomous !== undefined) query = query.eq('venomous', venomous);
 
     // Sorting
@@ -299,6 +305,9 @@ export class DatabaseService {
       endangered: marine.endangered,
       funFact: marine.fun_fact,
       imageUrl: marine.image_url,
+      edibility: marine.edibility,
+      poisonous: marine.poisonous,
+      endangeredd: marine.endangeredd,
       createdAt: marine.created_at,
       updatedAt: marine.updated_at
     })) || [];
@@ -351,6 +360,9 @@ export class DatabaseService {
       behavior: data.behavior,
       danger: data.danger,
       venomous: data.venomous,
+      edibility: data.edibility,
+      poisonous: data.poisonous,
+      endangeredd: data.endangeredd,
       description: data.description,
       lifeSpan: data.life_span,
       reproduction: data.reproduction,
@@ -382,6 +394,9 @@ export class DatabaseService {
     behavior?: string;
     danger: string;
     venomous: boolean;
+    edibility?: boolean;
+    poisonous?: boolean;
+    endangeredd?: boolean;
     description?: string;
     lifeSpan?: string;
     reproduction?: string;
@@ -403,6 +418,9 @@ export class DatabaseService {
         behavior: marineData.behavior,
         danger: marineData.danger,
         venomous: marineData.venomous,
+        edibility: marineData.edibility,
+        poisonous: marineData.poisonous,
+        endangeredd: marineData.endangeredd,
         description: marineData.description,
         life_span: marineData.lifeSpan,
         reproduction: marineData.reproduction,
@@ -429,6 +447,9 @@ export class DatabaseService {
       behavior: data.behavior,
       danger: data.danger,
       venomous: data.venomous,
+      edibility: data.edibility,
+      poisonous: data.poisonous,
+      endangeredd: data.endangeredd,
       description: data.description,
       lifeSpan: data.life_span,
       reproduction: data.reproduction,

@@ -68,6 +68,21 @@ const router = Router();
  *           type: boolean
  *         description: Filter by venomous status
  *       - in: query
+ *         name: edibility
+ *         schema:
+ *           type: boolean
+ *         description: Filter by edibility status
+ *       - in: query
+ *         name: poisonous
+ *         schema:
+ *           type: boolean
+ *         description: Filter by poisonous status
+ *       - in: query
+ *         name: endangeredd
+ *         schema:
+ *           type: boolean
+ *         description: Filter by endangered status
+ *       - in: query
  *         name: sort
  *         schema:
  *           type: string
@@ -118,6 +133,9 @@ router.get('/',
     if (req.query['sizeMax']) params.sizeMax = parseFloat(req.query['sizeMax'] as string);
     if (req.query['danger']) params.danger = req.query['danger'] as string;
     if (req.query['venomous'] !== undefined) params.venomous = req.query['venomous'] === 'true';
+    if (req.query['edibility'] !== undefined) params.edibility = req.query['edibility'] === 'true';
+    if (req.query['poisonous'] !== undefined) params.poisonous = req.query['poisonous'] === 'true';
+    if (req.query['endangeredd'] !== undefined) params.endangeredd = req.query['endangeredd'] === 'true';
     if (req.query['sort']) params.sort = req.query['sort'] as string;
     if (req.query['page']) params.page = parseInt(req.query['page'] as string);
     if (req.query['size']) params.size = parseInt(req.query['size'] as string);
@@ -222,6 +240,9 @@ router.get('/:id',
       behavior: marine.behavior,
       danger: marine.danger,
       venomous: marine.venomous,
+      edibility: marine.edibility,
+      poisonous: marine.poisonous,
+      endangeredd: marine.endangeredd,
       description: marine.description,
       imageUrl: marine.imageUrl,
       lifeSpan: marine.lifeSpan,
@@ -283,6 +304,9 @@ router.post('/',
       behavior: req.body.behavior,
       danger: req.body.danger,
       venomous: req.body.venomous,
+      edibility: req.body.edibility,
+      poisonous: req.body.poisonous,
+      endangeredd: req.body.endangeredd,
       description: req.body.description,
       lifeSpan: req.body.lifeSpan,
       reproduction: req.body.reproduction,
@@ -428,6 +452,21 @@ router.delete('/:id',
  *           type: boolean
  *         description: Filter by venomous status
  *       - in: query
+ *         name: edibility
+ *         schema:
+ *           type: boolean
+ *         description: Filter by edibility status
+ *       - in: query
+ *         name: poisonous
+ *         schema:
+ *           type: boolean
+ *         description: Filter by poisonous status
+ *       - in: query
+ *         name: endangeredd
+ *         schema:
+ *           type: boolean
+ *         description: Filter by endangered status
+ *       - in: query
  *         name: sort
  *         schema:
  *           type: string
@@ -498,6 +537,9 @@ router.get('/all/:deviceId',
     if (req.query['sizeMax']) params.sizeMax = parseFloat(req.query['sizeMax'] as string);
     if (req.query['danger']) params.danger = req.query['danger'] as string;
     if (req.query['venomous'] !== undefined) params.venomous = req.query['venomous'] === 'true';
+    if (req.query['edibility'] !== undefined) params.edibility = req.query['edibility'] === 'true';
+    if (req.query['poisonous'] !== undefined) params.poisonous = req.query['poisonous'] === 'true';
+    if (req.query['endangeredd'] !== undefined) params.endangeredd = req.query['endangeredd'] === 'true';
     if (req.query['sort']) params.sort = req.query['sort'] as string;
     if (req.query['page']) params.page = parseInt(req.query['page'] as string);
     if (req.query['size']) params.size = parseInt(req.query['size'] as string);
@@ -615,6 +657,228 @@ router.get('/all/:deviceId',
       
     } catch (error) {
       console.error('Error in marine/all/:deviceId route:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+        code: 'INTERNAL_ERROR'
+      });
+      return;
+    }
+  })
+);
+
+/**
+ * @swagger
+ * /api/marine/detail/{deviceId}/{marineId}:
+ *   get:
+ *     summary: Get detailed information about a specific marine species with user collection data
+ *     tags: [Marine]
+ *     parameters:
+ *       - in: path
+ *         name: deviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Device identifier
+ *       - in: path
+ *         name: marineId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Marine species ID
+ *     responses:
+ *       200:
+ *         description: Detailed marine species information with user collection data and spots where it can be found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     name:
+ *                       type: string
+ *                     scientificName:
+ *                       type: string
+ *                     category:
+ *                       type: string
+ *                     rarity:
+ *                       type: integer
+ *                     sizeMinCm:
+ *                       type: number
+ *                     sizeMaxCm:
+ *                       type: number
+ *                     habitatType:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     diet:
+ *                       type: string
+ *                     behavior:
+ *                       type: string
+ *                     danger:
+ *                       type: string
+ *                     venomous:
+ *                       type: boolean
+ *                     edibility:
+ *                       type: boolean
+ *                     poisonous:
+ *                       type: boolean
+ *                     endangeredd:
+ *                       type: boolean
+ *                     description:
+ *                       type: string
+ *                     imageUrl:
+ *                       type: string
+ *                     lifeSpan:
+ *                       type: string
+ *                     reproduction:
+ *                       type: string
+ *                     migration:
+ *                       type: string
+ *                     endangered:
+ *                       type: string
+ *                     funFact:
+ *                       type: string
+ *                     foundAtSpots:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           spotId:
+ *                             type: integer
+ *                           frequency:
+ *                             type: string
+ *                           seasonality:
+ *                             type: string
+ *                           notes:
+ *                             type: string
+ *                     totalSpots:
+ *                       type: integer
+ *                     inUserCollection:
+ *                       type: boolean
+ *                     hasAnalyzedPhotos:
+ *                       type: boolean
+ *                     lastSeen:
+ *                       type: string
+ *                     firstSeen:
+ *                       type: string
+ *                     totalPhotos:
+ *                       type: integer
+ *                     userPhotos:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     collectionId:
+ *                       type: integer
+ *                     status:
+ *                       type: string
+ *       404:
+ *         description: Marine species not found
+ *       400:
+ *         description: Invalid parameters
+ */
+router.get('/detail/:deviceId/:marineId',
+  validateParams(schemas.deviceIdAndMarineIdParam),
+  asyncHandler(async (req: Request, res: Response<ApiResponse>) => {
+    const deviceId = req.params['deviceId'];
+    const marineId = parseInt(req.params['marineId'] || '0');
+    
+    if (!deviceId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Device ID is required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    try {
+      // Get marine species details
+      const marine = await db.getMarineById(marineId);
+
+      if (!marine) {
+        return res.status(404).json({
+          success: false,
+          error: 'Marine species not found',
+          code: 'NOT_FOUND'
+        });
+      }
+
+      // Get user's collection for this marine species
+      let userCollection = null;
+      try {
+        const collectionResult = await db.getCollections(deviceId, { size: 1000 });
+        userCollection = collectionResult.data.find((collection: any) => collection.marineId === marineId);
+      } catch (error) {
+        console.warn(`Failed to get collections for device ${deviceId}:`, error);
+      }
+
+      // Transform spot_marine data to match API response format with camelCase
+      const foundAtSpots = marine.spotMarine?.map((sm: any) => ({
+        spotId: sm.spotId,
+        frequency: sm.frequency,
+        seasonality: sm.seasonality,
+        notes: sm.notes
+      })) || [];
+
+      // Build the detailed response
+      const response: any = {
+        id: marine.id,
+        name: marine.name,
+        scientificName: marine.scientificName,
+        category: marine.category,
+        rarity: marine.rarity,
+        sizeMinCm: marine.sizeMinCm,
+        sizeMaxCm: marine.sizeMaxCm,
+        habitatType: marine.habitatType || [],
+        diet: marine.diet,
+        behavior: marine.behavior,
+        danger: marine.danger,
+        venomous: marine.venomous,
+        edibility: marine.edibility,
+        poisonous: marine.poisonous,
+        endangeredd: marine.endangeredd,
+        description: marine.description,
+        imageUrl: marine.imageUrl,
+        lifeSpan: marine.lifeSpan,
+        reproduction: marine.reproduction,
+        migration: marine.migration,
+        endangered: marine.endangered,
+        funFact: marine.funFact,
+        foundAtSpots,
+        totalSpots: foundAtSpots.length
+      };
+
+      // Add collection data if user has this species
+      if (userCollection) {
+        response.inUserCollection = true;
+        response.hasAnalyzedPhotos = userCollection.photos?.some((p: any) => p.confidence && p.confidence > 0) || false;
+        response.lastSeen = userCollection.lastSeen;
+        response.firstSeen = userCollection.firstSeen;
+        response.totalPhotos = userCollection.photos?.length || 0;
+        response.userPhotos = userCollection.photos || [];
+        response.collectionId = userCollection.id;
+        response.status = userCollection.status;
+      } else {
+        response.inUserCollection = false;
+        response.hasAnalyzedPhotos = false;
+        response.totalPhotos = 0;
+        response.userPhotos = [];
+      }
+
+      res.json({
+        success: true,
+        data: response
+      });
+      return;
+      
+    } catch (error) {
+      console.error('Error in marine/detail/:deviceId/:marineId route:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error',
