@@ -230,6 +230,8 @@ export const schemas = {
     edibility: Joi.boolean().optional(),
     poisonous: Joi.boolean().optional(),
     endangeredd: Joi.boolean().optional(),
+    collected: Joi.boolean().optional(),
+    deviceId: Joi.string().optional(),
     sort: Joi.string().valid('name', 'rarity', 'sizeMin', 'sizeMax', 'category', 'collected').optional(),
     page: Joi.number().optional().min(1),
     size: Joi.number().optional().min(1).max(100)

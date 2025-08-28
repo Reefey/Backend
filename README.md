@@ -91,12 +91,19 @@ Step-by-step Supabase setup and configuration guide.
 - **Multi-Species Detection**: Identifies multiple species in a single image
 - **Bounding Box Generation**: Provides coordinates for each detected species
 - **Confidence Scoring**: Returns confidence levels for each identification
+- **Automatic Image URLs**: Automatically fetches high-quality images from reliable sources for new species
+- **Visual Species Preview**: Users can see what their fish looks like immediately after identification
 
 ### Snorkeling Spots Management
 - **Location-Based Search**: Find spots by coordinates and radius
 - **Marine Species Mapping**: Each spot shows what species can be found there
 - **Difficulty Ratings**: Easy, Medium, Hard classifications
 - **Seasonal Information**: When species are typically found
+
+### Collection Management
+- **Personalized Filtering**: Filter marine species by collection status (collected/not collected)
+- **Progress Tracking**: See which species you've found and which ones you still need
+- **Device-Specific Collections**: Each user's collection is tracked separately
 
 ### User Collections
 - **Personal Findings**: Users track their marine life discoveries

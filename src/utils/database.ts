@@ -229,16 +229,54 @@ export class DatabaseService {
     edibility?: boolean;
     poisonous?: boolean;
     endangeredd?: boolean;
+    collected?: boolean;
+    deviceId?: string;
     sort?: string;
     page?: number;
     size?: number;
   }) {
-    const { q, rarity, category, habitat, diet, behavior, sizeMin, sizeMax, danger, venomous, edibility, poisonous, endangeredd, sort = 'name', page = 1, size = 50 } = params;
+    const { q, rarity, category, habitat, diet, behavior, sizeMin, sizeMax, danger, venomous, edibility, poisonous, endangeredd, collected, deviceId, sort = 'name', page = 1, size = 50 } = params;
     const offset = (page - 1) * size;
 
-    let query = this.client
-      .from('marine')
-      .select('*', { count: 'exact' });
+    let query;
+    
+    // If filtering by collected status, we need to join with collections table
+    if (collected !== undefined && deviceId) {
+      if (collected === true) {
+        // Show only collected species - use inner join
+        query = this.client
+          .from('marine')
+          .select(`
+            *,
+            collections!inner(device_id)
+          `, { count: 'exact' })
+          .eq('collections.device_id', deviceId);
+      } else {
+        // Show only non-collected species - use subquery approach
+        const collectedMarineIds = await this.client
+          .from('collections')
+          .select('marine_id')
+          .eq('device_id', deviceId);
+        
+        const collectedIds = collectedMarineIds.data?.map((c: any) => c.marine_id) || [];
+        
+        if (collectedIds.length > 0) {
+          query = this.client
+            .from('marine')
+            .select('*', { count: 'exact' })
+            .not('id', 'in', `(${collectedIds.join(',')})`);
+        } else {
+          // If no collected species, show all species
+          query = this.client
+            .from('marine')
+            .select('*', { count: 'exact' });
+        }
+      }
+    } else {
+      query = this.client
+        .from('marine')
+        .select('*', { count: 'exact' });
+    }
 
     // Text search
     if (q) {
@@ -272,6 +310,14 @@ export class DatabaseService {
         break;
       case 'category':
         query = query.order('category', { ascending: true });
+        break;
+      case 'collected':
+        if (deviceId) {
+          // For collected sort, we need to handle it differently
+          // This will be handled after the main query
+        } else {
+          query = query.order('name', { ascending: true });
+        }
         break;
       default:
         query = query.order('name', { ascending: true });
@@ -403,6 +449,7 @@ export class DatabaseService {
     migration?: string;
     endangered?: string;
     funFact?: string;
+    imageUrl?: string;
   }) {
     const { data, error } = await this.client
       .from('marine')
@@ -426,8 +473,95 @@ export class DatabaseService {
         reproduction: marineData.reproduction,
         migration: marineData.migration,
         endangered: marineData.endangered,
-        fun_fact: marineData.funFact
+        fun_fact: marineData.funFact,
+        image_url: marineData.imageUrl
       })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Transform snake_case to camelCase
+    return {
+      id: data.id,
+      name: data.name,
+      scientificName: data.scientific_name,
+      category: data.category,
+      rarity: data.rarity,
+      sizeMinCm: data.size_min_cm,
+      sizeMaxCm: data.size_max_cm,
+      habitatType: data.habitat_type,
+      diet: data.diet,
+      behavior: data.behavior,
+      danger: data.danger,
+      venomous: data.venomous,
+      edibility: data.edibility,
+      poisonous: data.poisonous,
+      endangeredd: data.endangeredd,
+      description: data.description,
+      lifeSpan: data.life_span,
+      reproduction: data.reproduction,
+      migration: data.migration,
+      endangered: data.endangered,
+      funFact: data.fun_fact,
+      imageUrl: data.image_url,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  }
+
+  // Update marine species
+  async updateMarine(id: number, updateData: {
+    name?: string;
+    scientificName?: string;
+    category?: string;
+    rarity?: number;
+    sizeMinCm?: number;
+    sizeMaxCm?: number;
+    habitatType?: string[];
+    diet?: string;
+    behavior?: string;
+    danger?: string;
+    venomous?: boolean;
+    edibility?: boolean;
+    poisonous?: boolean;
+    endangeredd?: boolean;
+    description?: string;
+    lifeSpan?: string;
+    reproduction?: string;
+    migration?: string;
+    endangered?: string;
+    funFact?: string;
+    imageUrl?: string;
+  }) {
+    const updateFields: any = {};
+    
+    if (updateData.name !== undefined) updateFields.name = updateData.name;
+    if (updateData.scientificName !== undefined) updateFields.scientific_name = updateData.scientificName;
+    if (updateData.category !== undefined) updateFields.category = updateData.category;
+    if (updateData.rarity !== undefined) updateFields.rarity = updateData.rarity;
+    if (updateData.sizeMinCm !== undefined) updateFields.size_min_cm = updateData.sizeMinCm;
+    if (updateData.sizeMaxCm !== undefined) updateFields.size_max_cm = updateData.sizeMaxCm;
+    if (updateData.habitatType !== undefined) updateFields.habitat_type = updateData.habitatType;
+    if (updateData.diet !== undefined) updateFields.diet = updateData.diet;
+    if (updateData.behavior !== undefined) updateFields.behavior = updateData.behavior;
+    if (updateData.danger !== undefined) updateFields.danger = updateData.danger;
+    if (updateData.venomous !== undefined) updateFields.venomous = updateData.venomous;
+    if (updateData.edibility !== undefined) updateFields.edibility = updateData.edibility;
+    if (updateData.poisonous !== undefined) updateFields.poisonous = updateData.poisonous;
+    if (updateData.endangeredd !== undefined) updateFields.endangeredd = updateData.endangeredd;
+    if (updateData.description !== undefined) updateFields.description = updateData.description;
+    if (updateData.lifeSpan !== undefined) updateFields.life_span = updateData.lifeSpan;
+    if (updateData.reproduction !== undefined) updateFields.reproduction = updateData.reproduction;
+    if (updateData.migration !== undefined) updateFields.migration = updateData.migration;
+    if (updateData.endangered !== undefined) updateFields.endangered = updateData.endangered;
+    if (updateData.funFact !== undefined) updateFields.fun_fact = updateData.funFact;
+    if (updateData.imageUrl !== undefined) updateFields.image_url = updateData.imageUrl;
+
+    const { data, error } = await this.client
+      .from('marine')
+      .update(updateFields)
+      .eq('id', id)
       .select()
       .single();
 

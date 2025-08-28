@@ -83,10 +83,20 @@ const router = Router();
  *           type: boolean
  *         description: Filter by endangered status
  *       - in: query
+ *         name: collected
+ *         schema:
+ *           type: boolean
+ *         description: Filter to show only collected species (requires deviceId)
+ *       - in: query
+ *         name: deviceId
+ *         schema:
+ *           type: string
+ *         description: Device ID (required when using collected filter)
+ *       - in: query
  *         name: sort
  *         schema:
  *           type: string
- *           enum: [name, rarity, sizeMin, sizeMax, category]
+ *           enum: [name, rarity, sizeMin, sizeMax, category, collected]
  *           default: name
  *         description: Sort order
  *       - in: query
@@ -136,6 +146,8 @@ router.get('/',
     if (req.query['edibility'] !== undefined) params.edibility = req.query['edibility'] === 'true';
     if (req.query['poisonous'] !== undefined) params.poisonous = req.query['poisonous'] === 'true';
     if (req.query['endangeredd'] !== undefined) params.endangeredd = req.query['endangeredd'] === 'true';
+    if (req.query['collected'] !== undefined) params.collected = req.query['collected'] === 'true';
+    if (req.query['deviceId']) params.deviceId = req.query['deviceId'] as string;
     if (req.query['sort']) params.sort = req.query['sort'] as string;
     if (req.query['page']) params.page = parseInt(req.query['page'] as string);
     if (req.query['size']) params.size = parseInt(req.query['size'] as string);

@@ -1153,4 +1153,274 @@ router.get('/rate-limit',
   })
 );
 
+/**
+ * @swagger
+ * /api/ai/species-details:
+ *   post:
+ *     summary: Get detailed species information including image URL from AI
+ *     tags: [Intelligence]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - deviceId
+ *               - speciesName
+ *             properties:
+ *               deviceId:
+ *                 type: string
+ *                 description: Device identifier
+ *               speciesName:
+ *                 type: string
+ *                 description: Name of the marine species
+ *               scientificName:
+ *                 type: string
+ *                 description: Scientific name (optional, helps with accuracy)
+ *     responses:
+ *       200:
+ *         description: Species details retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     name:
+ *                       type: string
+ *                     scientificName:
+ *                       type: string
+ *                     category:
+ *                       type: string
+ *                       enum: [Fishes, Creatures, Corals]
+ *                     rarity:
+ *                       type: integer
+ *                       minimum: 1
+ *                       maximum: 5
+ *                     sizeMinCm:
+ *                       type: number
+ *                     sizeMaxCm:
+ *                       type: number
+ *                     habitatType:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     diet:
+ *                       type: string
+ *                     behavior:
+ *                       type: string
+ *                     danger:
+ *                       type: string
+ *                       enum: [Low, Medium, High, Extreme]
+ *                     venomous:
+ *                       type: boolean
+ *                     edibility:
+ *                       type: boolean
+ *                     poisonous:
+ *                       type: boolean
+ *                     endangeredd:
+ *                       type: boolean
+ *                     description:
+ *                       type: string
+ *                     lifeSpan:
+ *                       type: string
+ *                     reproduction:
+ *                       type: string
+ *                     migration:
+ *                       type: string
+ *                     endangered:
+ *                       type: string
+ *                     funFact:
+ *                       type: string
+ *                     imageUrl:
+ *                       type: string
+ *                       nullable: true
+ *                 message:
+ *                   type: string
+ *       429:
+ *         description: Rate limit exceeded
+ */
+router.post('/species-details',
+  asyncHandler(async (req: Request, res: Response<ApiResponse>) => {
+    const { deviceId, speciesName, scientificName } = req.body;
+    
+    if (!deviceId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Device ID is required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    if (!speciesName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Species name is required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    // Check rate limit
+    const rateLimitInfo = aiService.getRateLimitInfo(deviceId);
+    if (rateLimitInfo.used >= rateLimitInfo.limit) {
+      return res.status(429).json({
+        success: false,
+        error: 'Rate limit exceeded',
+        code: 'RATE_LIMIT_EXCEEDED'
+      } as any);
+    }
+
+    try {
+      // Get detailed species information including image URL
+      const speciesDetails = await aiService.getSpeciesDetails(speciesName);
+
+      // If no image URL was provided, try to search for one
+      if (!speciesDetails.imageUrl) {
+        try {
+          speciesDetails.imageUrl = await aiService.searchMarineImage(speciesName, scientificName);
+        } catch (error) {
+          console.warn(`Failed to search for image for ${speciesName}:`, error);
+        }
+      }
+
+      res.json({
+        success: true,
+        data: speciesDetails,
+        message: `Species details retrieved successfully for ${speciesName}`
+      });
+      return;
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: `Failed to get species details: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        code: 'PROCESSING_ERROR'
+      });
+    }
+  })
+);
+
+/**
+ * @swagger
+ * /api/ai/update-species-image:
+ *   post:
+ *     summary: Update existing species with image URL from internet search
+ *     tags: [Intelligence]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - deviceId
+ *               - marineId
+ *             properties:
+ *               deviceId:
+ *                 type: string
+ *                 description: Device identifier
+ *               marineId:
+ *                 type: integer
+ *                 description: ID of the marine species to update
+ *     responses:
+ *       200:
+ *         description: Species updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     name:
+ *                       type: string
+ *                     imageUrl:
+ *                       type: string
+ *                       nullable: true
+ *                 message:
+ *                   type: string
+ *       429:
+ *         description: Rate limit exceeded
+ */
+router.post('/update-species-image',
+  asyncHandler(async (req: Request, res: Response<ApiResponse>) => {
+    const { deviceId, marineId } = req.body;
+    
+    if (!deviceId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Device ID is required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    if (!marineId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Marine ID is required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    // Check rate limit
+    const rateLimitInfo = aiService.getRateLimitInfo(deviceId);
+    if (rateLimitInfo.used >= rateLimitInfo.limit) {
+      return res.status(429).json({
+        success: false,
+        error: 'Rate limit exceeded',
+        code: 'RATE_LIMIT_EXCEEDED'
+      } as any);
+    }
+
+    try {
+      // Get existing marine species
+      const marine = await db.getMarineById(marineId);
+
+      // Search for image URL
+      const imageUrl = await aiService.searchMarineImage(marine.name, marine.scientificName);
+
+      if (imageUrl) {
+        // Update the marine species with the new image URL
+        await db.updateMarine(marineId, { imageUrl });
+        
+        res.json({
+          success: true,
+          data: {
+            id: marine.id,
+            name: marine.name,
+            imageUrl: imageUrl
+          },
+          message: `Image URL updated successfully for ${marine.name}`
+        });
+      } else {
+        res.json({
+          success: false,
+          data: {
+            id: marine.id,
+            name: marine.name,
+            imageUrl: null
+          },
+          message: `No suitable image found for ${marine.name}`
+        });
+      }
+      return;
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: `Failed to update species image: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        code: 'PROCESSING_ERROR'
+      });
+    }
+  })
+);
+
 export default router;

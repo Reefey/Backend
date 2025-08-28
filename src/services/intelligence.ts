@@ -908,14 +908,69 @@ CRITICAL REQUIREMENTS:
         // Create new marine species if confidence is high enough
         if (detection.confidence >= 0.8 && detection.scientificName) {
           try {
+            // Get detailed species information including image URL
+            let speciesDetails;
+            try {
+              speciesDetails = await this.getSpeciesDetails(detection.species);
+            } catch (error) {
+              console.warn(`Failed to get detailed species info for ${detection.species}:`, error);
+              // Fallback to basic creation
+              speciesDetails = {
+                name: detection.species,
+                scientificName: detection.scientificName,
+                category: 'Fishes',
+                rarity: 3,
+                sizeMinCm: 0,
+                sizeMaxCm: 10,
+                habitatType: ['Unknown'],
+                diet: 'Unknown',
+                behavior: 'Unknown',
+                danger: 'Low',
+                venomous: false,
+                edibility: false,
+                poisonous: false,
+                endangeredd: false,
+                description: `Identified as ${detection.species}`,
+                lifeSpan: 'Unknown',
+                reproduction: 'Unknown',
+                migration: 'Unknown',
+                endangered: 'Unknown',
+                funFact: 'Species identified through AI analysis',
+                imageUrl: null
+              };
+            }
+
+            // If no image URL was provided, try to search for one
+            if (!speciesDetails.imageUrl) {
+              try {
+                speciesDetails.imageUrl = await this.searchMarineImage(detection.species, detection.scientificName);
+              } catch (error) {
+                console.warn(`Failed to search for image for ${detection.species}:`, error);
+              }
+            }
+
             const newMarine = await db.createMarine({
-              name: detection.species,
-              scientificName: detection.scientificName,
-              category: 'Fishes', // Default, could be improved with AI
-              rarity: 3, // Default
-              danger: 'Low', // Default
-              venomous: false, // Default
-              description: `Identified as ${detection.species}`
+              name: speciesDetails.name,
+              scientificName: speciesDetails.scientificName,
+              category: speciesDetails.category,
+              rarity: speciesDetails.rarity,
+              sizeMinCm: speciesDetails.sizeMinCm,
+              sizeMaxCm: speciesDetails.sizeMaxCm,
+              habitatType: speciesDetails.habitatType,
+              diet: speciesDetails.diet,
+              behavior: speciesDetails.behavior,
+              danger: speciesDetails.danger,
+              venomous: speciesDetails.venomous,
+              edibility: speciesDetails.edibility,
+              poisonous: speciesDetails.poisonous,
+              endangeredd: speciesDetails.endangeredd,
+              description: speciesDetails.description,
+              lifeSpan: speciesDetails.lifeSpan,
+              reproduction: speciesDetails.reproduction,
+              migration: speciesDetails.migration,
+              endangered: speciesDetails.endangered,
+              funFact: speciesDetails.funFact,
+              imageUrl: speciesDetails.imageUrl
             });
 
             detection.wasInDatabase = true;
@@ -1014,7 +1069,8 @@ Return a JSON object with EXACTLY these fields to match our database schema:
   "reproduction": "Reproduction method and details",
   "migration": "Migration patterns and movement",
   "endangered": "Conservation status (e.g., 'Least Concern', 'Vulnerable', 'Endangered')",
-  "funFact": "Interesting or unique fact about the species"
+  "funFact": "Interesting or unique fact about the species",
+  "imageUrl": "High-quality image URL from reliable sources (Wikipedia, FishBase, etc.)"
 }
 
 DETAILED FIELD REQUIREMENTS:
@@ -1043,6 +1099,12 @@ DETAILED FIELD REQUIREMENTS:
 17. **migration**: Movement patterns (e.g., "Site-attached", "Local movements", "Long-distance")
 18. **endangered**: IUCN conservation status or similar
 19. **funFact**: One interesting fact about the species
+20. **imageUrl**: High-quality image URL from reliable sources. Prefer:
+    - Wikipedia Commons (https://upload.wikimedia.org/wikipedia/commons/...)
+    - FishBase (https://www.fishbase.se/images/...)
+    - Marine species databases
+    - High-resolution, clear images showing the species clearly
+    - If no specific image found, use a placeholder or null
 
 SPECIES-SPECIFIC GUIDELINES:
 
@@ -1067,6 +1129,7 @@ ACCURACY REQUIREMENTS:
 - Include specific habitat types found in the region
 - Ensure all boolean fields are true/false, not strings
 - Ensure all numeric fields are numbers, not strings
+- For imageUrl: Provide direct links to high-quality images, prefer Wikipedia Commons URLs
 
 Return ONLY the JSON object, no additional text or explanations.`;
 
@@ -1095,7 +1158,7 @@ Return ONLY the JSON object, no additional text or explanations.`;
         'name', 'scientificName', 'category', 'rarity', 'sizeMinCm', 'sizeMaxCm',
         'habitatType', 'diet', 'behavior', 'danger', 'venomous', 'edibility', 
         'poisonous', 'endangeredd', 'description', 'lifeSpan', 'reproduction', 
-        'migration', 'endangered', 'funFact'
+        'migration', 'endangered', 'funFact', 'imageUrl'
       ];
 
       for (const field of requiredFields) {
@@ -1137,10 +1200,60 @@ Return ONLY the JSON object, no additional text or explanations.`;
         parsedData.endangeredd = false; // Default to not endangered
       }
 
+      // Validate imageUrl
+      if (typeof parsedData.imageUrl !== 'string' || !parsedData.imageUrl.trim()) {
+        parsedData.imageUrl = null;
+      }
+
       return parsedData;
 
     } catch (error) {
       throw new Error(`Failed to get species details: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Search for marine species image online
+  async searchMarineImage(speciesName: string, scientificName?: string): Promise<string | null> {
+    try {
+      const searchTerms = scientificName ? `${speciesName} ${scientificName}` : speciesName;
+      
+      const prompt = `Find a high-quality image URL for the marine species: ${searchTerms}
+
+Requirements:
+- Must be a direct link to an image file (ending in .jpg, .jpeg, .png, .webp)
+- Prefer Wikipedia Commons URLs (https://upload.wikimedia.org/wikipedia/commons/...)
+- Image should be clear and show the species well
+- Must be publicly accessible and free to use
+- Avoid watermarked or low-quality images
+
+Return ONLY the image URL as a string, or "null" if no suitable image found.`;
+
+      const response = await this.openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 500,
+        temperature: 0.1,
+      });
+
+      const content = response.choices[0]?.message?.content?.trim();
+      if (!content || content === 'null' || content === 'null.') {
+        return null;
+      }
+
+      // Validate URL format
+      try {
+        const url = new URL(content);
+        if (url.protocol === 'http:' || url.protocol === 'https:') {
+          return content;
+        }
+      } catch {
+        return null;
+      }
+
+      return null;
+    } catch (error) {
+      console.warn(`Failed to search for image for ${speciesName}:`, error);
+      return null;
     }
   }
 }
