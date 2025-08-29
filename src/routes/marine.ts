@@ -3,6 +3,7 @@ import { db } from '../utils/database';
 import { asyncHandler } from '../middleware/errorHandler';
 import { validate, validateQuery, validateParams, schemas } from '../middleware/validation';
 import { ApiResponse, PaginationResponse, Marine } from '../types/model';
+import { ImageResizerService } from '../utils/imageResizer';
 
 const router = Router();
 
@@ -239,6 +240,18 @@ router.get('/:id',
       notes: sm.notes
     })) || [];
 
+    // Get resized image URL if available
+    let resizedImageUrl = marine.imageUrl;
+    if (marine.imageUrl) {
+      try {
+        resizedImageUrl = await ImageResizerService.getResizedImageUrl(marine.imageUrl);
+      } catch (error) {
+        console.warn(`Failed to resize image for marine ${marine.id}:`, error);
+        // Keep original URL if resizing fails
+        resizedImageUrl = marine.imageUrl;
+      }
+    }
+
     const response = {
       id: marine.id,
       name: marine.name,
@@ -256,7 +269,7 @@ router.get('/:id',
       poisonous: marine.poisonous,
       endangeredd: marine.endangeredd,
       description: marine.description,
-      imageUrl: marine.imageUrl,
+      imageUrl: resizedImageUrl,
       lifeSpan: marine.lifeSpan,
       reproduction: marine.reproduction,
       migration: marine.migration,
@@ -838,6 +851,18 @@ router.get('/detail/:deviceId/:marineId',
         notes: sm.notes
       })) || [];
 
+      // Get resized image URL if available
+      let resizedImageUrl = marine.imageUrl;
+      if (marine.imageUrl) {
+        try {
+          resizedImageUrl = await ImageResizerService.getResizedImageUrl(marine.imageUrl);
+        } catch (error) {
+          console.warn(`Failed to resize image for marine ${marine.id}:`, error);
+          // Keep original URL if resizing fails
+          resizedImageUrl = marine.imageUrl;
+        }
+      }
+
       // Build the detailed response
       const response: any = {
         id: marine.id,
@@ -856,7 +881,7 @@ router.get('/detail/:deviceId/:marineId',
         poisonous: marine.poisonous,
         endangeredd: marine.endangeredd,
         description: marine.description,
-        imageUrl: marine.imageUrl,
+        imageUrl: resizedImageUrl,
         lifeSpan: marine.lifeSpan,
         reproduction: marine.reproduction,
         migration: marine.migration,

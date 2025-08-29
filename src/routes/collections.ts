@@ -6,6 +6,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { DatabaseService } from '../utils/database';
 import { StorageService } from '../utils/storage';
 import { ApiResponse } from '../types/model';
+import { ImageResizerService } from '../utils/imageResizer';
 
 const router = express.Router();
 const db = new DatabaseService();
@@ -336,7 +337,7 @@ router.get('/:deviceId',
         diet: collection.marine?.diet,
         behavior: collection.marine?.behavior,
         description: collection.marine?.description,
-        marineImageUrl: collection.marine?.imageUrl,
+        marineImageUrl: collection.marine?.imageUrl ? await ImageResizerService.getResizedImageUrl(collection.marine.imageUrl) : null,
         photos: photosWithSpotDetails,
         totalPhotos: photosWithSpotDetails.length,
         firstSeen: collection.firstSeen,
@@ -503,7 +504,7 @@ router.post('/:deviceId',
         diet: collectionEntry.marine?.diet,
         behavior: collectionEntry.marine?.behavior,
         description: collectionEntry.marine?.description,
-        marineImageUrl: collectionEntry.marine?.imageUrl,
+        marineImageUrl: collectionEntry.marine?.imageUrl ? await ImageResizerService.getResizedImageUrl(collectionEntry.marine.imageUrl) : null,
         photo: {
           id: photo.id,
           url: photo.url,

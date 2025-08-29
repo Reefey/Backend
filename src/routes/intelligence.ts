@@ -1279,13 +1279,9 @@ router.post('/species-details',
       // Get detailed species information including image URL
       const speciesDetails = await aiService.getSpeciesDetails(speciesName);
 
-      // If no image URL was provided, try to search for one
+      // If no image URL was provided, try to search for one (will always return a URL now)
       if (!speciesDetails.imageUrl) {
-        try {
-          speciesDetails.imageUrl = await aiService.searchMarineImage(speciesName, scientificName);
-        } catch (error) {
-          console.warn(`Failed to search for image for ${speciesName}:`, error);
-        }
+        speciesDetails.imageUrl = await aiService.searchMarineImage(speciesName, scientificName);
       }
 
       res.json({
@@ -1385,33 +1381,21 @@ router.post('/update-species-image',
       // Get existing marine species
       const marine = await db.getMarineById(marineId);
 
-      // Search for image URL
+      // Search for image URL (will always return a URL - either found image or fallback)
       const imageUrl = await aiService.searchMarineImage(marine.name, marine.scientificName);
 
-      if (imageUrl) {
-        // Update the marine species with the new image URL
-        await db.updateMarine(marineId, { imageUrl });
-        
-        res.json({
-          success: true,
-          data: {
-            id: marine.id,
-            name: marine.name,
-            imageUrl: imageUrl
-          },
-          message: `Image URL updated successfully for ${marine.name}`
-        });
-      } else {
-        res.json({
-          success: false,
-          data: {
-            id: marine.id,
-            name: marine.name,
-            imageUrl: null
-          },
-          message: `No suitable image found for ${marine.name}`
-        });
-      }
+      // Update the marine species with the image URL (always succeeds now)
+      await db.updateMarine(marineId, { imageUrl });
+      
+      res.json({
+        success: true,
+        data: {
+          id: marine.id,
+          name: marine.name,
+          imageUrl: imageUrl
+        },
+        message: `Image URL updated successfully for ${marine.name}`
+      });
       return;
     } catch (error) {
       return res.status(400).json({

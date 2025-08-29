@@ -139,6 +139,8 @@ Delete a snorkeling spot.
 ### GET /api/marine
 Get marine species with filtering and sorting.
 
+**Note:** Images are automatically resized using an external resizer service for optimal performance. The `imageUrl` field will contain the resized image URL.
+
 **Query Parameters:**
 - `q` (optional): Text search in name, scientific name, category, description
 - `rarity` (optional): Filter by rarity level (1-5)
@@ -172,7 +174,7 @@ Get marine species with filtering and sorting.
       "danger": "Low",
       "venomous": false,
       "description": "The iconic clownfish...",
-      "marineImage": "https://your-project.supabase.co/storage/v1/object/public/reefey-photos/marine/1/clownfish.jpg"
+      "imageUrl": "https://fls-9fbdb93b-a42f-4f1b-bd36-df123573e205.laravel.cloud/images/resized_1756373244_68b020fc280c3.jpg"
     }
   ],
   "pagination": {
@@ -188,6 +190,8 @@ Get marine species with filtering and sorting.
 
 ### GET /api/marine/:id
 Get detailed information about a specific marine species.
+
+**Note:** Images are automatically resized using an external resizer service for optimal performance. The `imageUrl` field will contain the resized image URL.
 
 **Response:**
 ```json
@@ -207,7 +211,7 @@ Get detailed information about a specific marine species.
     "danger": "Low",
     "venomous": false,
     "description": "The iconic clownfish...",
-          "marineImage": "https://your-project.supabase.co/storage/v1/object/public/reefey-photos/marine/1/clownfish.jpg",
+    "imageUrl": "https://fls-9fbdb93b-a42f-4f1b-bd36-df123573e205.laravel.cloud/images/resized_1756373244_68b020fc280c3.jpg",
     "lifeSpan": "6-10 years",
     "reproduction": "Eggs near anemone; male guards",
     "migration": "Site-attached to host",

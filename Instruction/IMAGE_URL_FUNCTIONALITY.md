@@ -30,6 +30,15 @@ New endpoints allow manual updates of existing species:
 - **Get species details**: Retrieve comprehensive information including image URL
 - **Update species image**: Search and update image URL for existing species
 
+### 4. Fallback Image System
+
+**NEW**: The system now includes a robust fallback image system:
+
+- **Automatic fallback**: When no suitable image is found for a marine species, the system automatically uses a default marine-themed image
+- **Fallback URL**: `https://puntbmozbsbdzgrjotxt.supabase.co/storage/v1/object/public/reefey-photos/thumbnail/Miscellaneous.svg`
+- **Always returns an image**: The `searchMarineImage` method now always returns a valid image URL, ensuring users always see a visual representation
+- **Error resilience**: Even if the AI search fails or returns invalid URLs, users will see the fallback image
+
 ## API Endpoints
 
 ### 1. Get Species Details with Image URL
@@ -115,11 +124,15 @@ New endpoints allow manual updates of existing species:
 - **Validation**: Ensures image URLs are valid HTTP/HTTPS links
 - **Fallback**: Returns null if no suitable image is found
 
-#### New `searchMarineImage` Method
+#### Enhanced `searchMarineImage` Method
 
-- **Dedicated image search**: Uses AI to find high-quality images
-- **Source preference**: Prioritizes Wikipedia Commons and FishBase
-- **URL validation**: Ensures returned URLs are valid and accessible
+- **Multi-strategy search**: Implements multiple search strategies for better results
+- **Progressive fallback**: Tries scientific name, common name, context terms, and alternative names
+- **Source preference**: Prioritizes reputable marine biology databases
+- **Advanced validation**: Validates URLs, file extensions, and domain reputation
+- **Fallback system**: Always returns a valid image URL (either found image or fallback)
+- **Error resilience**: Handles all error cases gracefully with fallback image
+- **Comprehensive logging**: Tracks which search strategy successfully found images
 
 ### 2. Database Updates
 
@@ -128,179 +141,158 @@ New endpoints allow manual updates of existing species:
 - **Image URL support**: Now accepts and stores image URLs
 - **Backward compatibility**: Works with existing species without images
 
-#### New `updateMarine` Method
+#### Enhanced `updateMarine` Method
 
-- **Partial updates**: Allows updating specific fields including image URL
-- **Data transformation**: Handles camelCase to snake_case conversion
-- **Error handling**: Proper error handling for database operations
+- **Image URL updates**: Allows updating existing species with new image URLs
+- **Validation**: Ensures image URLs are properly formatted
 
-### 3. Intelligence Service Integration
+### 3. Enhanced Search Strategies
 
-#### Enhanced Species Creation Process
+#### Multi-Strategy Search System
 
-When a new species is detected:
+The system now uses a sophisticated multi-strategy approach to find images:
 
-1. **Get detailed information**: Call `getSpeciesDetails` for comprehensive data
-2. **Image URL fallback**: If no image URL provided, call `searchMarineImage`
-3. **Database creation**: Store all information including image URL
-4. **User feedback**: Return complete species data with image
+1. **Scientific Name Search**: First tries the scientific name for maximum accuracy
+2. **Common Name Search**: Searches using the common species name
+3. **Context-Enhanced Search**: Adds terms like "fish", "marine" for better results
+4. **Habitat Context Search**: Uses terms like "underwater", "ocean", "reef"
+5. **Alternative Name Search**: Tries variations and alternative spellings
 
-#### Error Handling
+#### Progressive Fallback System
 
-- **Graceful degradation**: System continues working even if image search fails
-- **Logging**: Comprehensive logging for debugging and monitoring
-- **Fallback data**: Default values ensure system stability
+The system guarantees that every marine species will have an image URL:
 
-## Image Source Guidelines
+1. **Primary search**: Attempts to find a high-quality image from reliable sources
+2. **Strategy progression**: Tries multiple search strategies in order of preference
+3. **Advanced validation**: Validates URLs, file extensions, and domain reputation
+4. **Fallback**: If no valid image is found, uses the default marine-themed image
+5. **Error handling**: Even if the search process fails, returns the fallback image
 
-### Preferred Sources
+#### Search Strategy Details
 
-1. **Wikipedia Commons**
-   - URL pattern: `https://upload.wikimedia.org/wikipedia/commons/...`
-   - High quality, freely licensed images
-   - Reliable and stable URLs
+**Strategy Order:**
+1. **Scientific Name**: Uses exact scientific name for maximum accuracy
+2. **Common Name**: Searches with the species common name
+3. **Context Terms**: Adds "fish", "marine" for better search results
+4. **Habitat Terms**: Uses "underwater", "ocean", "reef" for habitat context
+5. **Alternative Names**: Tries variations and alternative spellings
 
-2. **FishBase**
-   - URL pattern: `https://www.fishbase.se/images/...`
-   - Scientific accuracy
-   - Marine species expertise
+**Preferred Sources:**
+1. Wikipedia Commons (most reliable)
+2. FishBase (marine species expertise)
+3. WoRMS (World Register of Marine Species)
+4. NOAA Fisheries (government source)
+5. Australian Museum (scientific accuracy)
+6. Smithsonian Ocean (educational quality)
+7. MarineBio (comprehensive database)
 
-3. **Marine Species Databases**
-   - Reputable scientific sources
-   - High-resolution images
-   - Proper species identification
+#### Fallback Image Details
 
-### Image Quality Requirements
-
-- **Resolution**: High-resolution images (minimum 800x600)
-- **Clarity**: Clear, well-lit images showing the species clearly
-- **Composition**: Species should be the main focus
-- **Licensing**: Freely usable images (Creative Commons, public domain)
-- **Stability**: URLs should be stable and long-lasting
+- **URL**: `https://puntbmozbsbdzgrjotxt.supabase.co/storage/v1/object/public/reefey-photos/thumbnail/Miscellaneous.svg`
+- **Type**: SVG format for crisp display at any size
+- **Content**: Marine-themed illustration suitable for all species
+- **Availability**: Stored in Supabase storage for reliable access
 
 ## Usage Examples
 
-### 1. Automatic Image URL Generation
+### 1. Automatic Image Assignment
 
-When a user takes a photo and the AI identifies a new species:
-
-```javascript
-// The system automatically:
+```typescript
+// When AI identifies a new species
 const speciesDetails = await aiService.getSpeciesDetails('New Fish Species');
-if (!speciesDetails.imageUrl) {
-  speciesDetails.imageUrl = await aiService.searchMarineImage('New Fish Species');
-}
-const newMarine = await db.createMarine(speciesDetails);
-// User now sees the fish image immediately
+
+// Image URL will always be available (either found image or fallback)
+console.log(speciesDetails.imageUrl); // Always returns a valid URL
 ```
 
-### 2. Manual Image URL Update
+### 2. Manual Image Update
 
-For existing species without images:
-
-```javascript
-// Admin or user can update species images
+```typescript
+// Update existing species with new image
 const result = await fetch('/api/ai/update-species-image', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    deviceId: 'user123',
-    marineId: 456
+    deviceId: 'user-device-id',
+    marineId: 123
   })
 });
-// Species now has an image URL
+
+// Result will always include an image URL
+const data = await result.json();
+console.log(data.data.imageUrl); // Always returns a valid URL
 ```
 
-### 3. Get Species Details
+### 3. Enhanced Search Behavior
 
-For comprehensive species information:
+```typescript
+// The system now tries multiple strategies automatically
+const imageUrl = await aiService.searchMarineImage('Clownfish', 'Amphiprion ocellaris');
 
-```javascript
-const details = await fetch('/api/ai/species-details', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    deviceId: 'user123',
-    speciesName: 'Clownfish',
-    scientificName: 'Amphiprion ocellaris'
-  })
-});
-// Returns complete species data including image URL
+// Search progression:
+// 1. "Amphiprion ocellaris" (scientific name)
+// 2. "Clownfish" (common name)
+// 3. "Clownfish fish", "Clownfish marine" (context)
+// 4. "Clownfish underwater", "Clownfish ocean" (habitat)
+// 5. Alternative spellings and variations
+
+console.log(imageUrl); // Returns best found image or fallback URL
+```
+
+### 4. Search Strategy Logging
+
+```typescript
+// The system logs which strategy successfully found an image
+// Example console output:
+// "Found image for Clownfish using scientific strategy: Amphiprion ocellaris"
+// "Found image for Blue Tang using common_with_context strategy: Blue Tang fish"
+// "No suitable image found for Very Rare Fish, using fallback"
 ```
 
 ## Benefits
 
-### 1. Enhanced User Experience
+### 1. User Experience
 
-- **Visual feedback**: Users can see what their fish looks like immediately
-- **Educational value**: High-quality images help with species identification
-- **Engagement**: Visual content increases user engagement
+- **Always visual**: Users never see missing images or broken image placeholders
+- **Consistent interface**: All species have a visual representation
+- **Professional appearance**: Maintains app quality even for rare or unknown species
 
-### 2. Improved Data Quality
+### 2. System Reliability
 
-- **Comprehensive information**: Complete species profiles with images
-- **Reliable sources**: Images from reputable scientific sources
-- **Consistent quality**: Standardized image quality requirements
+- **Error resilience**: System continues to function even when external image sources are unavailable
+- **Reduced failures**: Eliminates null image URL scenarios
+- **Graceful degradation**: Falls back to appropriate default image
 
-### 3. System Reliability
+### 3. Development Benefits
 
-- **Fallback mechanisms**: System works even when images aren't available
-- **Error handling**: Graceful degradation prevents system failures
-- **Performance**: Efficient image search and storage
+- **Simplified logic**: No need to handle null image URL cases in frontend
+- **Predictable behavior**: Always returns a valid image URL
+- **Reduced error handling**: Eliminates null checks for image URLs
 
-## Rate Limiting
+## Technical Notes
 
-All new endpoints respect the existing rate limiting system:
+### 1. Method Signature Changes
 
-- **Daily limits**: Configured per device
-- **AI usage tracking**: Image searches count toward AI usage
-- **Fair usage**: Prevents abuse while allowing legitimate use
+The `searchMarineImage` method signature has been updated:
 
-## Future Enhancements
+```typescript
+// Before
+async searchMarineImage(speciesName: string, scientificName?: string): Promise<string | null>
 
-### 1. Image Caching
+// After
+async searchMarineImage(speciesName: string, scientificName?: string): Promise<string>
+```
 
-- **Local storage**: Cache frequently accessed images
-- **CDN integration**: Use content delivery networks for faster loading
-- **Image optimization**: Compress and optimize images for mobile
+### 2. Error Handling
 
-### 2. Multiple Images
+- **No more null returns**: Method always returns a valid URL string
+- **Exception safety**: All exceptions are caught and result in fallback image
+- **Graceful degradation**: System continues to function even with external failures
 
-- **Image galleries**: Support multiple images per species
-- **Different angles**: Show species from various perspectives
-- **Life stages**: Images of juvenile and adult forms
+### 3. Performance
 
-### 3. User Contributions
-
-- **Community uploads**: Allow users to contribute images
-- **Quality moderation**: Review and approve user-submitted images
-- **Attribution**: Credit photographers and sources
-
-## Troubleshooting
-
-### Common Issues
-
-1. **No image found**
-   - Check if species name is spelled correctly
-   - Try using scientific name
-   - Verify species exists in marine databases
-
-2. **Invalid image URL**
-   - URL validation ensures only valid links are stored
-   - Check if source website is accessible
-   - Verify image still exists at the URL
-
-3. **Rate limit exceeded**
-   - Check daily AI usage limits
-   - Wait for rate limit reset
-   - Contact support if limits are too restrictive
-
-### Debugging
-
-- **Logs**: Check server logs for detailed error messages
-- **API responses**: Verify API responses for error details
-- **Database**: Check if image URLs are stored correctly
-
-## Conclusion
-
-The new image URL functionality significantly enhances the Reefey app by providing users with immediate visual feedback when new species are identified. The system is robust, reliable, and provides a much better user experience while maintaining high data quality standards.
+- **Fast fallback**: Fallback image is served from Supabase CDN
+- **Optimized search**: Multiple strategies run efficiently with early termination
+- **Consistent response times**: Predictable performance regardless of search results
+- **Reduced API calls**: Early termination when valid image is found
+- **Caching friendly**: Reputable domain URLs are more likely to be cached

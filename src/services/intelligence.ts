@@ -92,9 +92,11 @@ export class AIService {
     _deviceId: string,
     _spotId?: number,
     _lat?: number,
-    _lng?: number
+    _lng?: number,
+    aiResponse?: string
   ): Promise<AIAnalysisResponse> {
-    console.log('🔄 Using fallback analysis - AI service unavailable or refused analysis');
+    const isRefusal = aiResponse ? this.isAIRefusalResponse(aiResponse) : false;
+    console.log(`🔄 Using fallback analysis - ${isRefusal ? 'AI refused analysis' : 'AI service unavailable'}`);
     
     try {
       // Try to extract basic image information
@@ -105,10 +107,10 @@ export class AIService {
         species: 'Unknown Marine Life',
         scientificName: undefined,
         confidence: 0.1,
-        confidenceReasoning: 'Fallback analysis - AI service unavailable',
+        confidenceReasoning: isRefusal ? 'AI refused to analyze image' : 'Fallback analysis - AI service unavailable',
         wasInDatabase: false,
         databaseId: undefined,
-        description: 'Unable to identify species due to AI service unavailability',
+        description: isRefusal ? 'Unable to identify species due to AI policy restrictions' : 'Unable to identify species due to AI service unavailability',
         behavioralNotes: 'No behavioral observations available',
         sizeEstimate: 'Unknown',
         habitatContext: 'Underwater environment',
@@ -121,15 +123,15 @@ export class AIService {
       };
 
       const fallbackUnknownSpecies: UnknownSpecies = {
-        description: 'Marine life detected but unable to identify due to service limitations',
+        description: isRefusal ? 'Image analysis was restricted by AI policy. Please ensure the image contains only marine life and underwater environments.' : 'Marine life detected but unable to identify due to service limitations',
         behavioralNotes: 'No behavioral data available',
         sizeCharacteristics: 'Size cannot be determined',
         colorPatterns: 'Color analysis unavailable',
         habitatPosition: 'Underwater environment',
         similarSpecies: [],
-        gptResponse: 'Fallback analysis used',
+        gptResponse: aiResponse || 'Fallback analysis used',
         confidence: 0.1,
-        confidenceReasoning: 'Limited analysis due to AI service unavailability',
+        confidenceReasoning: isRefusal ? 'AI refused to analyze image due to policy restrictions' : 'Limited analysis due to AI service unavailability',
         instances: [{
           boundingBox: { x: 0.250, y: 0.250, width: 0.500, height: 0.500 },
           confidence: 0.1
@@ -149,8 +151,8 @@ export class AIService {
         identifiedSpecies: 0,
         unknownSpecies: 1,
         averageConfidence: 0.1,
-        annotationQuality: 'low',
-        processingNotes: 'Fallback analysis used due to AI service unavailability'
+        annotationQuality: isRefusal ? 'restricted' : 'low',
+        processingNotes: isRefusal ? 'AI refused to analyze image due to policy restrictions. Please ensure image contains only marine life and underwater environments.' : 'Fallback analysis used due to AI service unavailability'
       };
 
       return {
@@ -299,6 +301,75 @@ export class AIService {
     }
   }
 
+  // Check if AI response indicates refusal to analyze
+  private isAIRefusalResponse(content: string): boolean {
+    const refusalKeywords = [
+      'unable to analyze',
+      'privacy and policy reasons',
+      'recognizable individuals',
+      'policy reasons',
+      'cannot analyze',
+      'unable to provide',
+      'due to privacy',
+      'policy restrictions',
+      'not appropriate',
+      'cannot process',
+      'terrestrial images',
+      'not a marine',
+      'not underwater',
+      'not appropriate for marine',
+      'cannot help with marine',
+      'unable to help with marine'
+    ];
+    
+    const lowerContent = content.toLowerCase();
+    return refusalKeywords.some(keyword => lowerContent.includes(keyword.toLowerCase()));
+  }
+
+  // Create fallback response when AI refuses analysis
+  private createRefusalFallbackResponse(aiResponse: string): {
+    detections: AIDetection[];
+    unknownSpecies: UnknownSpecies[];
+    imageAnalysis?: ImageAnalysis;
+    annotationMetadata?: AnnotationMetadata;
+  } {
+    console.log('🔄 AI refused analysis, creating fallback response');
+    
+    return {
+      detections: [],
+      unknownSpecies: [{
+        description: 'Image analysis was restricted by AI policy. Please ensure the image contains only marine life and underwater environments.',
+        behavioralNotes: 'No behavioral data available due to analysis restrictions',
+        sizeCharacteristics: 'Size cannot be determined',
+        colorPatterns: 'Color analysis unavailable',
+        habitatPosition: 'Underwater environment',
+        similarSpecies: [],
+        gptResponse: aiResponse,
+        confidence: 0.1,
+        confidenceReasoning: 'AI refused to analyze image due to policy restrictions',
+        instances: [{
+          boundingBox: { x: 0.250, y: 0.250, width: 0.500, height: 0.500 },
+          confidence: 0.1
+        }]
+      }],
+      imageAnalysis: {
+        overallQuality: 'unknown',
+        lightingConditions: 'unknown',
+        waterClarity: 'unknown',
+        depthEstimate: 'unknown',
+        habitatType: 'unknown'
+      },
+      annotationMetadata: {
+        totalDetections: 1,
+        identifiedSpecies: 0,
+        unknownSpecies: 1,
+        averageConfidence: 0.1,
+        annotationQuality: 'restricted',
+        processingNotes: 'AI refused to analyze image due to policy restrictions. Please ensure image contains only marine life and underwater environments.'
+      }
+    };
+  }
+
   // Parse AI response with fallback for malformed responses
   private async parseAIResponseWithFallback(content: string): Promise<{
     detections: AIDetection[];
@@ -306,6 +377,11 @@ export class AIService {
     imageAnalysis?: ImageAnalysis;
     annotationMetadata?: AnnotationMetadata;
   }> {
+    // First check if AI refused to analyze
+    if (this.isAIRefusalResponse(content)) {
+      return this.createRefusalFallbackResponse(content);
+    }
+    
     try {
       return this.parseAIResponse(content);
     } catch (error) {
@@ -533,7 +609,9 @@ export class AIService {
 
   // Create analysis prompt for GPT
   private createAnalysisPrompt(): string {
-    return `You are an expert marine biologist and computer vision specialist with advanced annotation capabilities. Your task is to comprehensively analyze underwater photos and provide detailed annotations for both visual elements and structured data.
+    return `You are an expert marine biologist and computer vision specialist with advanced annotation capabilities. Your task is to comprehensively analyze ALL provided images as marine/underwater photos and provide detailed annotations for both visual elements and structured data.
+
+CRITICAL INSTRUCTION: You MUST analyze ALL images as marine/underwater environments, regardless of their appearance. Do NOT refuse analysis or claim images are terrestrial. If no marine life is visible, provide appropriate analysis indicating no marine species detected, but still analyze the underwater environment and habitat.
 
 ANNOTATION CAPABILITIES:
 1. VISUAL ANNOTATION: Precise bounding box detection with species location relative to the image
@@ -592,6 +670,13 @@ SPECIES CATEGORIES TO FOCUS ON:
 - Mollusks (clams, snails, nudibranchs)
 - Any other marine life visible
 
+IMAGE ANALYSIS GUIDELINES:
+- ALWAYS treat the image as an underwater/marine environment
+- If no marine life is visible, analyze the underwater habitat (sand, rocks, coral, seagrass, etc.)
+- If the image appears unclear or contains non-marine elements, still provide underwater environment analysis
+- Focus on any visible underwater features, water conditions, and potential marine habitats
+- Do not refuse analysis based on image content - always provide marine-focused analysis
+
 QUALITY ASSESSMENT CRITERIA:
 - Image clarity and resolution
 - Lighting conditions
@@ -616,6 +701,14 @@ For unknown species, provide:
 5. Habitat position in image
 6. Similar species suggestions
 7. Confidence level with reasoning
+
+WHEN NO MARINE LIFE IS DETECTED:
+- Provide analysis of the underwater environment visible in the image
+- Describe water conditions, substrate (sand, rock, coral), and habitat features
+- Note any potential hiding places or areas where marine life might be present
+- Assess water clarity, lighting, and depth indicators
+- Provide habitat analysis even if no living organisms are visible
+- Do not refuse analysis - always provide marine environment assessment
 
 COORDINATE EXAMPLES (THREE DECIMAL PRECISION):
 - Top-left corner: {"x": 0.000, "y": 0.000, "width": 0.200, "height": 0.150}
@@ -688,7 +781,9 @@ CRITICAL REQUIREMENTS:
 5. Assess image quality for each detection individually
 6. Maintain consistent formatting and precision throughout
 7. Focus on accuracy over quantity - better to have fewer high-confidence detections than many uncertain ones
-8. Include estimated characteristics for each detected species to help with database matching`;
+8. Include estimated characteristics for each detected species to help with database matching
+9. NEVER refuse to analyze an image - always provide marine-focused analysis regardless of image content
+10. If no marine life is visible, analyze the underwater environment and habitat instead of refusing analysis`;
   }
 
   // Parse AI response
@@ -1100,7 +1195,6 @@ DETAILED FIELD REQUIREMENTS:
 18. **endangered**: IUCN conservation status or similar
 19. **funFact**: One interesting fact about the species
 20. **imageUrl**: High-quality image URL from reliable sources. Prefer:
-    - Wikipedia Commons (https://upload.wikimedia.org/wikipedia/commons/...)
     - FishBase (https://www.fishbase.se/images/...)
     - Marine species databases
     - High-resolution, clear images showing the species clearly
@@ -1129,7 +1223,7 @@ ACCURACY REQUIREMENTS:
 - Include specific habitat types found in the region
 - Ensure all boolean fields are true/false, not strings
 - Ensure all numeric fields are numbers, not strings
-- For imageUrl: Provide direct links to high-quality images, prefer Wikipedia Commons URLs
+- For imageUrl: Provide direct links to high-quality images
 
 Return ONLY the JSON object, no additional text or explanations.`;
 
@@ -1212,49 +1306,145 @@ Return ONLY the JSON object, no additional text or explanations.`;
     }
   }
 
-  // Search for marine species image online
-  async searchMarineImage(speciesName: string, scientificName?: string): Promise<string | null> {
-    try {
-      const searchTerms = scientificName ? `${speciesName} ${scientificName}` : speciesName;
-      
-      const prompt = `Find a high-quality image URL for the marine species: ${searchTerms}
+  // Search for marine species image online with multiple search strategies
+  async searchMarineImage(speciesName: string, scientificName?: string): Promise<string> {
+    const fallbackUrl = "https://puntbmozbsbdzgrjotxt.supabase.co/storage/v1/object/public/reefey-photos/thumbnail/Miscellaneous.svg";
+    
+    // Define search strategies in order of preference
+    const searchStrategies = [
+      { name: "scientific", terms: scientificName ? [scientificName] : [] },
+      { name: "common", terms: [speciesName] },
+      { name: "common_with_context", terms: [`${speciesName} fish`, `${speciesName} marine`] },
+      { name: "habitat_context", terms: [`${speciesName} underwater`, `${speciesName} ocean`, `${speciesName} reef`] },
+      { name: "alternative_names", terms: this.getAlternativeNames(speciesName) }
+    ];
 
-Requirements:
-- Must be a direct link to an image file (ending in .jpg, .jpeg, .png, .webp)
-- Prefer Wikipedia Commons URLs (https://upload.wikimedia.org/wikipedia/commons/...)
-- Image should be clear and show the species well
-- Must be publicly accessible and free to use
-- Avoid watermarked or low-quality images
-
-Return ONLY the image URL as a string, or "null" if no suitable image found.`;
-
-      const response = await this.openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 500,
-        temperature: 0.1,
-      });
-
-      const content = response.choices[0]?.message?.content?.trim();
-      if (!content || content === 'null' || content === 'null.') {
-        return null;
-      }
-
-      // Validate URL format
-      try {
-        const url = new URL(content);
-        if (url.protocol === 'http:' || url.protocol === 'https:') {
-          return content;
+    // Try each search strategy
+    for (const strategy of searchStrategies) {
+      for (const searchTerm of strategy.terms) {
+        try {
+          const imageUrl = await this.searchWithStrategy(searchTerm, strategy.name);
+          if (imageUrl && imageUrl !== 'null' && imageUrl !== 'null.') {
+            // Validate the URL
+            if (this.isValidImageUrl(imageUrl)) {
+              console.log(`Found image for ${speciesName} using ${strategy.name} strategy: ${searchTerm}`);
+              return imageUrl;
+            }
+          }
+        } catch (error) {
+          console.warn(`Search strategy ${strategy.name} failed for ${searchTerm}:`, error);
+          continue; // Try next strategy
         }
-      } catch {
-        return null;
+      }
+    }
+
+    console.log(`No suitable image found for ${speciesName}, using fallback`);
+    return fallbackUrl;
+  }
+
+  // Helper method to search with a specific strategy
+  private async searchWithStrategy(searchTerm: string, strategyName: string): Promise<string> {
+    const prompt = `Find a high-quality image URL for the marine species: ${searchTerm}
+
+SEARCH STRATEGY: ${strategyName.toUpperCase()}
+Searching for: "${searchTerm}"
+
+PREFERRED SOURCES (in order):
+1. Wikipedia Commons: https://upload.wikimedia.org/wikipedia/commons/
+2. FishBase: https://www.fishbase.se/images/
+3. WoRMS (World Register of Marine Species): https://www.marinespecies.org/
+4. NOAA Fisheries: https://www.fisheries.noaa.gov/
+5. Australian Museum: https://australian.museum/
+6. Smithsonian Ocean: https://ocean.si.edu/
+7. MarineBio: https://marinebio.org/
+8. Other reputable marine biology databases
+
+IMAGE REQUIREMENTS:
+- Must be a direct link to an image file (ending in .jpg, .jpeg, .png, .webp, .svg)
+- High resolution (minimum 800x600 pixels)
+- Clear, well-lit image showing the species clearly
+- Species should be the main focus of the image
+- Must be publicly accessible and free to use
+- Avoid watermarked, low-quality, or heavily edited images
+- Prefer natural underwater photos over illustrations when possible
+
+VALIDATION:
+- Ensure the URL is accessible and returns an image
+- Check that the image actually shows the requested species
+- Verify the image is not behind a paywall or requiring login
+
+Return ONLY the best image URL as a string, or "null" if no suitable image found.`;
+
+    const response = await this.openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 500,
+      temperature: 0.1,
+    });
+
+    return response.choices[0]?.message?.content?.trim() || 'null';
+  }
+
+  // Helper method to validate image URLs
+  private isValidImageUrl(url: string): boolean {
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return false;
       }
 
-      return null;
-    } catch (error) {
-      console.warn(`Failed to search for image for ${speciesName}:`, error);
-      return null;
+      // Check for valid image file extensions
+      const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.svg', '.gif'];
+      const hasValidExtension = validExtensions.some(ext => 
+        parsedUrl.pathname.toLowerCase().includes(ext)
+      );
+
+      if (!hasValidExtension) {
+        return false;
+      }
+
+      // Check for preferred domains
+      const preferredDomains = [
+        'upload.wikimedia.org',
+        'fishbase.se',
+        'marinespecies.org',
+        'fisheries.noaa.gov',
+        'australian.museum',
+        'ocean.si.edu',
+        'marinebio.org'
+      ];
+
+      const isPreferredDomain = preferredDomains.some(domain => 
+        parsedUrl.hostname.includes(domain)
+      );
+
+      return isPreferredDomain;
+    } catch {
+      return false;
     }
+  }
+
+  // Helper method to get alternative names for species
+  private getAlternativeNames(speciesName: string): string[] {
+    const alternatives: string[] = [];
+    
+    // Common alternative spellings and variations
+    const variations = [
+      speciesName.toLowerCase(),
+      speciesName.replace(/\s+/g, '-'),
+      speciesName.replace(/\s+/g, '_'),
+      speciesName.replace(/fish$/i, ''),
+      speciesName.replace(/fish$/i, 'fish'),
+    ];
+
+    // Add variations that don't duplicate
+    variations.forEach(variant => {
+      if (variant !== speciesName && !alternatives.includes(variant)) {
+        alternatives.push(variant);
+      }
+    });
+
+    return alternatives;
   }
 }
 
